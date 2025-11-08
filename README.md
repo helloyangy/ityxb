@@ -3,6 +3,8 @@
 
 支持言溪题库，把token复制进去即可答题
 
+# 需要搭配油猴使用，脚本已经同步上传[greasyfork.org](https://greasyfork.org/zh-CN/scripts/555204-%E4%BC%A0%E6%99%BA%E6%95%99%E8%82%B2%E6%BB%A1%E5%88%86%E8%84%9A%E6%9C%AC-%E5%8F%AF%E9%85%8D%E7%BD%AE%E9%A2%98%E5%BA%93%E7%89%88-2025-11-10)
+
 地址：[https://tk.enncy.cn/](https://tk.enncy.cn/)
 
 AI答题正确配置方法
