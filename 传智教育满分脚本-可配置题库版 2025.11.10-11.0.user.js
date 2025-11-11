@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         传智教育满分脚本-可配置题库版 2025.11.10
 // @namespace    https://stu.ityxb.com/
-// @version      11.3
+// @version      11.4
 // @description  修复粘贴和删除按钮 + 可配置题库 + 言溪题库标准接口
 // @author       小羊优化版
 // @match        https://stu.ityxb.com/*
@@ -60,9 +60,9 @@
     inputs.forEach((input) => {
       if (input.dataset.pasteEnabled) return;
       input.dataset.pasteEnabled = "true";
-  
+
       input.addEventListener("paste", (e) => e.stopPropagation());
-  
+
       // 只给 GPT Key 加 Show 图标
       if (input.type === "password" && input.id === "gpt_k") {
         const eye = document.createElement("span");
@@ -71,7 +71,7 @@
           "position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; font-size: 16px; color: #0f0; z-index: 1;";
         eye.onclick = () =>
           (input.type = input.type === "password" ? "text" : "password");
-  
+
         const wrapper = document.createElement("div");
         wrapper.style.position = "relative";
         input.parentNode.insertBefore(wrapper, input);
@@ -352,7 +352,7 @@
             <div style="font-size:24px;text-align:center;margin-bottom:20px;text-shadow: 0 0 10px #0f0;">
                 ⚙️ 配置中心
             </div>
-
+            
             <div class="cfg-section">
                 <h3>📚 题库配置</h3>
                 <div id="banks_list"></div>
@@ -360,19 +360,54 @@
             </div>
 
             <div class="cfg-section">
-                <h3>🤖 AI配置（兜底）</h3>
+                <h3>🤖 AI配置（兜底/直接答题）</h3>
                 <label>
                     <input type="checkbox" id="gpt_sw" ${
                       CONFIG.gpt_enabled ? "checked" : ""
                     }>
-                    启用GPT兜底（题库找不到时使用）
+                    启用AI答题（题库找不到时自动使用，或无题库时直接使用）
                 </label>
-                <input type="text" id="gpt_k" placeholder="粘贴你的 GPT API Key" value="${
+                
+                <div style="background: rgba(0,255,0,0.05); padding: 12px; border-radius: 8px; margin: 10px 0; border-left: 3px solid #0f0;">
+                    <div style="font-size: 13px; color: #00ff00; margin-bottom: 8px;">
+                        💡 <strong>支持第三方中转API</strong>
+                    </div>
+                    <div style="font-size: 12px; color: #0f0; line-height: 1.6;">
+                        • 支持 OpenAI 官方 API<br>
+                        • 支持国内第三方中转（推荐）<br>
+                        • 常见中转: api.chatanywhere.com.cn, api.gptsapi.net 等<br>
+                        • 只需修改URL和Key即可
+                    </div>
+                </div>
+
+                <label style="font-size: 14px; margin-top: 10px;">API Key (必填):</label>
+                <input type="password" id="gpt_k" placeholder="sk-xxxxxxxx 或中转平台的Key" value="${
                   CONFIG.gpt_key
                 }">
-                <input type="text" id="gpt_u" placeholder="GPT API URL（默认即可）" value="${
+                
+                <label style="font-size: 14px; margin-top: 10px;">API地址 (完整URL):</label>
+                <input type="text" id="gpt_u" placeholder="https://burn.hair/v1/chat/completions" value="${
                   CONFIG.gpt_url
                 }">
+                
+                <label style="font-size: 14px; margin-top: 10px;">模型名称:</label>
+                <input type="text" id="gpt_model" placeholder="gpt-4o-mini (推荐)" value="${
+                  CONFIG.gpt_model
+                }">
+                
+                <div style="background: rgba(255,255,0,0.1); padding: 10px; border-radius: 6px; margin: 10px 0; border-left: 3px solid #ff0;">
+                    <div style="font-size: 12px; color: #ff0; line-height: 1.5;">
+                        ⚠️ <strong>第三方中转配置示例:</strong><br>
+                        • <strong>burn.hair 示例:</strong><br>
+                        &nbsp;&nbsp;URL: https://burn.hair/v1/chat/completions<br>
+                        &nbsp;&nbsp;Key: sk-xxxxx<br>
+                        &nbsp;&nbsp;模型: gpt-4o-mini<br><br>
+                        • <strong>ChatAnywhere 示例:</strong><br>
+                        &nbsp;&nbsp;URL: https://api.chatanywhere.com.cn/v1/chat/completions<br>
+                        &nbsp;&nbsp;Key: 中转key<br>
+                        &nbsp;&nbsp;模型: gpt-4o-mini
+                    </div>
+                </div>
             </div>
 
             <div class="btn-group">
@@ -456,23 +491,32 @@
         }>
                     <strong>${bank.name}</strong>
                 </label>
-                <input type="text" placeholder="题库名称" value="${bank.name}"
+                <input type="text" placeholder="题库名称" value="${bank.name}" 
                     onchange="updateBank(${index}, 'name', this.value)">
-                <input type="text" placeholder="题库URL" value="${bank.url}"
+                <input type="text" placeholder="题库URL" value="${bank.url}" 
                     onchange="updateBank(${index}, 'url', this.value)">
                 <input type="password" placeholder="Token/Key（如有）" value="${
                   bank.token || ""
-                }"
+                }" 
                     onchange="updateBank(${index}, 'token', this.value)"
                     style="font-family: monospace;">
-                    <button class="cfg-btn delete-bank-btn" data-index="${index}"
+                <button class="cfg-btn delete-bank-btn" data-index="${index}"
                         style="background: linear-gradient(135deg, #f00, #c00) !important; margin-top: 10px;">
                         删除此题库
-                    </button>
+                </button>
             </div>
         `
       )
       .join("");
+
+    // 绑定复选框切换
+    list.querySelectorAll(".bank-toggle").forEach((cb) => {
+      cb.onchange = function () {
+        const idx = parseInt(this.dataset.index);
+        CONFIG.banks[idx].enabled = this.checked;
+        renderBanksList();
+      };
+    });
 
     // 绑定删除按钮
     list.querySelectorAll(".delete-bank-btn").forEach((btn) => {
@@ -488,19 +532,6 @@
       };
     });
   }
-
-  // ================ 全局函数（供HTML调用）================
-  window.updateBank = function (index, field, value) {
-    CONFIG.banks[index][field] = value;
-  };
-
-  window.deleteBank = function (index) {
-    if (confirm(`确定删除题库"${CONFIG.banks[index].name}"？`)) {
-      CONFIG.banks.splice(index, 1);
-      renderBanksList();
-      log(`已删除题库`, "info");
-    }
-  };
 
   // ================ 事件绑定 ================
   function bindEvents() {
@@ -530,15 +561,36 @@
         saveBtn.onclick = (e) => {
           e.preventDefault();
           e.stopPropagation();
-
+      
           CONFIG.gpt_enabled = document.getElementById("gpt_sw").checked;
           CONFIG.gpt_key = document.getElementById("gpt_k").value.trim();
           CONFIG.gpt_url = document.getElementById("gpt_u").value.trim();
-
+          CONFIG.gpt_model = document.getElementById("gpt_model").value.trim() || "gpt-4o-mini"; // 修复点
+      
+          // 验证配置
+          if (CONFIG.gpt_enabled && !CONFIG.gpt_key) {
+            alert("请填写 API Key！");
+            return;
+          }
+      
+          // 设置默认值
+          if (!CONFIG.gpt_url) {
+            CONFIG.gpt_url = "https://api.openai.com/v1/chat/completions";
+          }
+      
           GM_setValue("chuanzhi_config_v11", CONFIG);
           document.getElementById("FIX_CFG").style.display = "none";
-          log("✅ 配置保存成功", "info");
+          log("配置保存成功", "info");
           updateStatus("配置已保存");
+      
+          // 显示当前配置摘要
+          const enabledBanks = CONFIG.banks.filter((b) => b.enabled);
+          if (enabledBanks.length > 0) {
+            log(`已启用 ${enabledBanks.length} 个题库`, "success");
+          }
+          if (CONFIG.gpt_enabled) {
+            log(`AI已启用 (${CONFIG.gpt_model})`, "success"); // 现在会正确显示
+          }
         };
       }
 
@@ -886,6 +938,13 @@
 
   // ================ GPT查询 ================
   function queryGPT(question, element, num, total) {
+    if (!CONFIG.gpt_key) {
+      log(`第${num}题 AI未配置Key`, "error");
+      return;
+    }
+
+    log(`第${num}题 正在使用AI答题 (${CONFIG.gpt_model})...`, "info");
+
     GM_xmlhttpRequest({
       method: "POST",
       url: CONFIG.gpt_url,
@@ -894,33 +953,59 @@
         Authorization: `Bearer ${CONFIG.gpt_key}`,
       },
       data: JSON.stringify({
-        model: "gpt-4o-mini",
+        model: CONFIG.gpt_model,
         temperature: 0.1,
+        max_tokens: 500,
         messages: [
           {
+            role: "system",
+            content:
+              "你是一个专业的答题助手。请直接给出准确答案，不要解释。多个答案用#分隔。",
+          },
+          {
             role: "user",
-            content: `${question}\n\n请直接给出答案，多个答案用#分隔`,
+            content: question,
           },
         ],
       }),
       timeout: 30000,
       onload: (response) => {
         try {
-          const data = JSON.parse(response.responseText);
-          const answer = data.choices[0].message.content.trim();
-          cache[question] = answer;
-          GM_setValue("tiku_cache_v11", cache);
-          fillAnswer(element, answer, "GPT", num);
-          log(`第${num}题 [GPT] ${answer}`, "success");
-          updateStatus(`处理中: ${num}/${total} [GPT]`);
+          if (response.status === 200) {
+            const data = JSON.parse(response.responseText);
+
+            // 标准 OpenAI API 响应格式
+            if (data.choices && data.choices[0] && data.choices[0].message) {
+              const answer = data.choices[0].message.content.trim();
+
+              cache[question] = answer;
+              GM_setValue("tiku_cache_v11", cache);
+              fillAnswer(element, answer, "AI", num);
+              log(`第${num}题 [AI] ${answer}`, "success");
+              updateStatus(`处理中: ${num}/${total} [AI]`);
+            } else {
+              throw new Error("响应格式错误");
+            }
+          } else if (response.status === 401) {
+            log(`第${num}题 AI认证失败，请检查Key`, "error");
+            updateStatus(`处理中: ${num}/${total} [AI认证失败]`);
+          } else {
+            log(`第${num}题 AI请求失败 (${response.status})`, "error");
+            updateStatus(`处理中: ${num}/${total} [AI失败]`);
+          }
         } catch (e) {
-          log(`第${num}题 GPT解析失败`, "error");
-          updateStatus(`处理中: ${num}/${total} [GPT失败]`);
+          console.error("AI解析错误:", e);
+          log(`第${num}题 AI解析失败: ${e.message}`, "error");
+          updateStatus(`处理中: ${num}/${total} [AI解析失败]`);
         }
       },
-      onerror: () => {
-        log(`第${num}题 GPT请求失败`, "error");
-        updateStatus(`处理中: ${num}/${total} [GPT失败]`);
+      onerror: (error) => {
+        log(`第${num}题 AI网络错误`, "error");
+        updateStatus(`处理中: ${num}/${total} [AI网络错误]`);
+      },
+      ontimeout: () => {
+        log(`第${num}题 AI请求超时`, "warn");
+        updateStatus(`处理中: ${num}/${total} [AI超时]`);
       },
     });
   }
@@ -996,6 +1081,25 @@
   // ================ 初始化 ================
   function init() {
     log("🚀 脚本加载完成", "success");
+
+    // 显示配置状态
+    const enabledBanks = CONFIG.banks.filter((b) => b.enabled && b.token);
+    if (enabledBanks.length > 0) {
+      log(`已配置 ${enabledBanks.length} 个题库`, "info");
+    } else {
+      log("⚠️ 未配置题库，请在配置中心添加", "warn");
+    }
+
+    if (CONFIG.gpt_enabled && CONFIG.gpt_key) {
+      log(`✅ AI已启用 (${CONFIG.gpt_model})`, "success");
+    } else if (CONFIG.gpt_enabled && !CONFIG.gpt_key) {
+      log("⚠️ AI已启用但未配置Key", "warn");
+    }
+
+    if (!enabledBanks.length && !CONFIG.gpt_key) {
+      log("❗ 请先配置题库或AI后再开始答题", "error");
+    }
+
     initUI();
 
     setTimeout(() => {
