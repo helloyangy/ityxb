@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         传智教育满分脚本-可配置题库版 2025.11.10
 // @namespace    https://stu.ityxb.com/
-// @version      11.1
+// @version      11.2
 // @description  修复粘贴快捷键按钮 + 可配置题库 + 言溪题库标准接口
-// @author       Claude优化版
+// @author       小羊优化版
 // @match        https://stu.ityxb.com/*
 // @match        https://stu.ityxb.com/writePaper/*
 // @connect      tk.enncy.cn
