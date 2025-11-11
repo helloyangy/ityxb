@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         传智教育满分脚本-可配置题库版 2025.11.10
 // @namespace    https://stu.ityxb.com/
-// @version      11.2
-// @description  修复粘贴快捷键按钮 + 可配置题库 + 言溪题库标准接口
+// @version      11.3
+// @description  修复粘贴和删除按钮 + 可配置题库 + 言溪题库标准接口
 // @author       小羊优化版
 // @match        https://stu.ityxb.com/*
 // @match        https://stu.ityxb.com/writePaper/*
@@ -58,26 +58,29 @@
       '#FIX_CFG input[type="text"], #FIX_CFG input[type="password"]'
     );
     inputs.forEach((input) => {
+      if (input.dataset.pasteEnabled) return;
+      input.dataset.pasteEnabled = "true";
+  
       input.addEventListener("paste", (e) => e.stopPropagation());
-      if (input.type === "password") {
+  
+      // 只给 GPT Key 加 Show 图标
+      if (input.type === "password" && input.id === "gpt_k") {
         const eye = document.createElement("span");
-        eye.textContent = "👁";
+        eye.textContent = "Show";
         eye.style.cssText =
-          "margin-left: -30px; cursor: pointer; font-size: 16px;";
+          "position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; font-size: 16px; color: #0f0; z-index: 1;";
         eye.onclick = () =>
           (input.type = input.type === "password" ? "text" : "password");
-        input.parentNode.style.position = "relative";
-        input.parentNode.appendChild(eye);
-        input.style.paddingRight = "35px";
+  
+        const wrapper = document.createElement("div");
+        wrapper.style.position = "relative";
+        input.parentNode.insertBefore(wrapper, input);
+        wrapper.appendChild(input);
+        wrapper.appendChild(eye);
+        input.style.paddingRight = "40px";
       }
     });
   }
-
-  // 在打开配置面板时调用
-  openBtn.onclick = () => {
-    document.getElementById("FIX_CFG").style.display = "block";
-    setTimeout(enablePaste, 100);
-  };
 
   // ================ 样式 ================
   GM_addStyle(`
@@ -462,21 +465,26 @@
                 }"
                     onchange="updateBank(${index}, 'token', this.value)"
                     style="font-family: monospace;">
-                <button class="cfg-btn" onclick="deleteBank(${index})"
-                    style="background: linear-gradient(135deg, #f00, #c00) !important; margin-top: 10px;">
-                    🗑️ 删除此题库
-                </button>
+                    <button class="cfg-btn delete-bank-btn" data-index="${index}"
+                        style="background: linear-gradient(135deg, #f00, #c00) !important; margin-top: 10px;">
+                        删除此题库
+                    </button>
             </div>
         `
       )
       .join("");
 
-    // 绑定复选框事件
-    list.querySelectorAll(".bank-toggle").forEach((cb) => {
-      cb.onchange = function () {
+    // 绑定删除按钮
+    list.querySelectorAll(".delete-bank-btn").forEach((btn) => {
+      btn.onclick = function (e) {
+        e.preventDefault();
+        e.stopPropagation();
         const idx = parseInt(this.dataset.index);
-        CONFIG.banks[idx].enabled = this.checked;
-        renderBanksList();
+        if (confirm(`确定删除题库"${CONFIG.banks[idx].name}"？`)) {
+          CONFIG.banks.splice(idx, 1);
+          renderBanksList();
+          log(`已删除题库`, "info");
+        }
       };
     });
   }
@@ -509,7 +517,11 @@
         openBtn.onclick = (e) => {
           e.preventDefault();
           e.stopPropagation();
-          document.getElementById("FIX_CFG").style.display = "block";
+          const cfg = document.getElementById("FIX_CFG");
+          if (cfg) {
+            cfg.style.display = "block";
+            setTimeout(enablePaste, 100); // 打开面板后启用粘贴
+          }
           log("打开配置面板", "info");
         };
       }
