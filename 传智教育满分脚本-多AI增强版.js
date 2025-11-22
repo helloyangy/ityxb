@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         传智教育满分脚本-多AI增强版 2025.11.22
 // @namespace    https://stu.ityxb.com/
-// @version      13.0
-// @description  多AI模型支持 + 题库右上角关闭 + 模块化架构 + 性能优化
+// @version      13.5
+// @description  多AI模型支持(全手动输入版) + 题库右上角关闭 + 模块化架构 + 性能优化
 // @author       多AI增强版
 // @match        https://stu.ityxb.com/*
 // @connect      tk.enncy.cn
@@ -25,13 +25,12 @@
 (function () {
   "use strict";
 
-  // ================ AI 模型配置 ================
+  // ================ AI 模型配置 (无预设列表，全手动) ================
   const AI_MODELS = {
     openai: {
       name: "OpenAI (GPT)",
       endpoint: "https://api.openai.com/v1/chat/completions",
-      models: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"],
-      defaultModel: "gpt-4o-mini",
+      defaultModel: "gpt-4o-mini", // 仅作为建议默认值
       authType: "Bearer",
       formatRequest: (config, question) => ({
         model: config.ai_model,
@@ -40,7 +39,7 @@
         messages: [
           {
             role: "system",
-            content: "你是专业答题助手。直接给出准确答案，不要解释。多个答案用#分隔。",
+            content: "你是专业答题助手。直接给出准确答案,不要解释。多个答案用#分隔。",
           },
           { role: "user", content: question },
         ],
@@ -50,8 +49,7 @@
     claude: {
       name: "Claude (Anthropic)",
       endpoint: "https://api.anthropic.com/v1/messages",
-      models: ["claude-3-5-sonnet-20241022", "claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"],
-      defaultModel: "claude-3-5-sonnet-20241022",
+      defaultModel: "claude-3-5-sonnet-20241022", // 仅作为建议默认值
       authType: "x-api-key",
       formatRequest: (config, question) => ({
         model: config.ai_model,
@@ -59,7 +57,7 @@
         messages: [
           {
             role: "user",
-            content: "你是专业答题助手。直接给出准确答案，不要解释。多个答案用#分隔。\n\n" + question,
+            content: "你是专业答题助手。直接给出准确答案,不要解释。多个答案用#分隔。\n\n" + question,
           },
         ],
       }),
@@ -70,16 +68,16 @@
     },
     gemini: {
       name: "Google Gemini",
+      // 注意: URL包含 {model} 占位符
       endpoint: "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-      models: ["gemini-2.0-flash-exp", "gemini-1.5-pro", "gemini-1.5-flash"],
-      defaultModel: "gemini-2.0-flash-exp",
+      defaultModel: "gemini-2.0-flash-exp", // 仅作为建议默认值
       authType: "query",
       formatRequest: (config, question) => ({
         contents: [
           {
             parts: [
               {
-                text: "你是专业答题助手。直接给出准确答案，不要解释。多个答案用#分隔。\n\n" + question,
+                text: "你是专业答题助手。直接给出准确答案,不要解释。多个答案用#分隔。\n\n" + question,
               },
             ],
           },
@@ -91,14 +89,17 @@
       }),
       parseResponse: (data) => data.candidates[0].content.parts[0].text.trim(),
       buildUrl: (config) => {
-        const url = config.ai_url.replace("{model}", config.ai_model);
+        // 支持用户自定义URL，若URL含{model}则替换
+        let url = config.ai_url;
+        if (url.includes("{model}")) {
+          url = url.replace("{model}", config.ai_model);
+        }
         return `${url}?key=${config.ai_key}`;
       },
     },
     deepseek: {
       name: "DeepSeek",
-      endpoint: "https://api.deepseek.com/v1/chat/completions",
-      models: ["deepseek-chat", "deepseek-coder"],
+      endpoint: "https://api.deepseek.com/chat/completions", // 修正为官方最新路径
       defaultModel: "deepseek-chat",
       authType: "Bearer",
       formatRequest: (config, question) => ({
@@ -108,7 +109,7 @@
         messages: [
           {
             role: "system",
-            content: "你是专业答题助手。直接给出准确答案，不要解释。多个答案用#分隔。",
+            content: "你是专业答题助手。直接给出准确答案,不要解释。多个答案用#分隔。",
           },
           { role: "user", content: question },
         ],
@@ -118,7 +119,6 @@
     custom: {
       name: "自定义 API",
       endpoint: "",
-      models: ["custom-model"],
       defaultModel: "custom-model",
       authType: "Bearer",
       formatRequest: (config, question) => ({
@@ -128,7 +128,7 @@
         messages: [
           {
             role: "system",
-            content: "你是专业答题助手。直接给出准确答案，不要解释。多个答案用#分隔。",
+            content: "你是专业答题助手。直接给出准确答案,不要解释。多个答案用#分隔。",
           },
           { role: "user", content: question },
         ],
@@ -301,7 +301,7 @@
     },
 
     load() {
-      return GM_getValue("chuanzhi_config_v13", this.DEFAULT_CONFIG);
+      return GM_getValue("chuanzhi_config_v13_5", this.DEFAULT_CONFIG);
     },
 
     save(config) {
@@ -315,7 +315,7 @@
         }
       });
 
-      GM_setValue("chuanzhi_config_v13", saveConfig);
+      GM_setValue("chuanzhi_config_v13_5", saveConfig);
     },
 
     decrypt(config) {
@@ -334,14 +334,10 @@
       const errors = [];
 
       if (config.ai_enabled) {
-        if (!config.ai_key || config.ai_key.length < 10) {
-          errors.push("AI API Key 格式不正确（至少10个字符）");
+        if (!config.ai_key || config.ai_key.length < 5) {
+          errors.push("AI API Key 格式不正确(至少5个字符)");
         }
-        if (config.ai_provider !== "gemini") {
-          if (!config.ai_url || !config.ai_url.match(/^https?:\/\/.+/)) {
-            errors.push("AI API URL 格式不正确");
-          }
-        }
+        // 移除了URL强制校验，允许localhost等
         if (!config.ai_model) {
           errors.push("AI 模型名称不能为空");
         }
@@ -495,7 +491,7 @@
 
       if (this.requests.length >= this.maxRequests) {
         const waitTime = this.timeWindow - (now - this.requests[0]);
-        Logger.warn(`API限流：等待 ${Math.ceil(waitTime / 1000)} 秒`);
+        Logger.warn(`API限流:等待 ${Math.ceil(waitTime / 1000)} 秒`);
         await Utils.sleep(waitTime);
       }
 
@@ -512,7 +508,7 @@
         } catch (error) {
           if (i === maxRetries - 1) throw error;
           const delay = Math.pow(2, i) * 1000;
-          Logger.warn(`请求失败，${delay}ms 后重试 (${i + 1}/${maxRetries})`);
+          Logger.warn(`请求失败,${delay}ms 后重试 (${i + 1}/${maxRetries})`);
           await Utils.sleep(delay);
         }
       }
@@ -713,7 +709,7 @@
     async processQuestion(element, num, total) {
       try {
         if (element.querySelector(".answer-mark")) {
-          Logger.debug(`第${num}题已处理，跳过`);
+          Logger.debug(`第${num}题已处理,跳过`);
           return { status: "skipped", num };
         }
 
@@ -1237,7 +1233,7 @@
       panel.id = "FIX_PANEL";
       panel.innerHTML = `
         <div id="panel_header">
-          <span style="font-size:18px;">📊 传智满分助手 v13.0</span>
+          <span style="font-size:18px;">📊 传智满分助手 v13.5</span>
           <button id="minimize_btn" title="最小化/还原">−</button>
         </div>
         <div id="panel_content">
@@ -1277,7 +1273,7 @@
       const cfg = document.createElement("div");
       cfg.id = "FIX_CFG";
 
-      // 构建AI模型选项
+      // 构建AI提供商选项
       const aiProviderOptions = Object.entries(AI_MODELS)
         .map(
           ([key, model]) =>
@@ -1287,17 +1283,7 @@
         )
         .join("");
 
-      // 构建当前模型的模型列表
-      const currentProvider = AI_MODELS[this.config.ai_provider] || AI_MODELS.openai;
-      const modelOptions = currentProvider.models
-        .map(
-          (model) =>
-            `<option value="${model}" ${
-              this.config.ai_model === model ? "selected" : ""
-            }>${model}</option>`
-        )
-        .join("");
-
+      // HTML 结构
       cfg.innerHTML = `
         <button id="cfg_close_btn" title="关闭">✕</button>
 
@@ -1314,21 +1300,17 @@
         </div>
 
         <div class="cfg-section">
-          <h3>🤖 AI配置（多模型支持）</h3>
+          <h3>🤖 AI配置 (全模型支持)</h3>
           <label>
             <input type="checkbox" id="ai_sw" ${
               this.config.ai_enabled ? "checked" : ""
             }>
-            启用AI答题（题库找不到时使用）
+            启用AI答题(题库找不到时使用)
           </label>
 
           <div class="ai-provider-hint">
-            💡 <strong>支持多种AI模型:</strong><br>
-            • OpenAI (GPT-4, GPT-3.5等)<br>
-            • Claude (Anthropic)<br>
-            • Google Gemini<br>
-            • DeepSeek<br>
-            • 自定义API (兼容OpenAI格式)
+            💡 <strong>提示:</strong> 模型名称需手动输入，无需等待脚本更新。<br>
+            例如: <code>gpt-4o</code>, <code>deepseek-chat</code>, <code>gemini-2.0-flash</code>
           </div>
 
           <label style="font-size: 14px; margin-top: 10px;">AI提供商:</label>
@@ -1346,28 +1328,20 @@
             </span>
           </div>
 
-          <label style="font-size: 14px; margin-top: 10px;">模型名称:</label>
-          <select id="ai_model">
-            ${modelOptions}
-          </select>
+          <label style="font-size: 14px; margin-top: 10px;">模型名称 (手动输入):</label>
+          <!-- 纯文本输入框，移除 Select -->
+          <input type="text" id="ai_model" value="${this.config.ai_model}" placeholder="例如: gpt-4o-mini">
 
-          <div id="ai_url_section" style="${
-            this.config.ai_provider === "gemini" ? "display: none;" : ""
-          }">
-            <label style="font-size: 14px; margin-top: 10px;">API地址 (高级):</label>
-            <input type="text" id="ai_u" placeholder="默认使用官方地址" value="${
+          <div id="ai_url_section">
+            <label style="font-size: 14px; margin-top: 10px;">API地址 (URL):</label>
+            <input type="text" id="ai_u" placeholder="API 请求地址" value="${
               this.config.ai_url
             }">
+             <div class="ai-provider-hint" style="margin-top:5px; font-size:11px; padding:5px;">
+                Gemini 官方需保留 {model} 占位符
+             </div>
           </div>
 
-          <div class="ai-provider-hint" style="background: rgba(255,255,0,0.1); border-left-color: #ff0;">
-            ⚠️ <strong>快速配置提示:</strong><br>
-            • <strong>OpenAI:</strong> 需要API Key，支持第三方中转<br>
-            • <strong>Claude:</strong> 需要Anthropic API Key<br>
-            • <strong>Gemini:</strong> 在Google AI Studio获取免费Key<br>
-            • <strong>DeepSeek:</strong> 国产模型，性价比高<br>
-            • <strong>自定义:</strong> 兼容OpenAI格式的API
-          </div>
         </div>
 
         <div class="cfg-section">
@@ -1431,7 +1405,7 @@
           <input type="text" class="bank-url" placeholder="题库URL" value="${Utils.sanitizeHTML(
             bank.url
           )}" data-index="${index}">
-          <input type="password" class="bank-token" placeholder="Token/Key（如有）" value="${Utils.sanitizeHTML(
+          <input type="password" class="bank-token" placeholder="Token/Key(如有)" value="${Utils.sanitizeHTML(
             bank.token || ""
           )}" data-index="${index}">
         </div>
@@ -1477,7 +1451,7 @@
           e.preventDefault();
           e.stopPropagation();
           const idx = parseInt(e.target.dataset.index);
-          if (confirm(`确定删除题库"${this.config.banks[idx].name}"？`)) {
+          if (confirm(`确定删除题库"${this.config.banks[idx].name}"?`)) {
             this.config.banks.splice(idx, 1);
             this.renderBanksList();
             Logger.info("已删除题库");
@@ -1528,28 +1502,26 @@
         Logger.info("已添加新题库");
       };
 
-      // AI提供商切换
+      // ======= 核心修改: AI提供商切换 (纯文本输入版) =======
       document.getElementById("ai_provider").onchange = (e) => {
         const provider = e.target.value;
-        const modelSelect = document.getElementById("ai_model");
-        const urlSection = document.getElementById("ai_url_section");
-        const urlInput = document.getElementById("ai_u");
-
-        // 更新模型列表
         const providerConfig = AI_MODELS[provider];
-        modelSelect.innerHTML = providerConfig.models
-          .map((model) => `<option value="${model}">${model}</option>`)
-          .join("");
+        const urlInput = document.getElementById("ai_u");
+        const modelInput = document.getElementById("ai_model"); // 现在是 input text
 
-        // 更新默认URL
+        // 1. 更新当前配置 Provider
+        this.config.ai_provider = provider;
+
+        // 2. 填充建议的默认值 (用户可随意修改)
+        // 只有当输入框为空，或者值为其他厂商的默认值时，才自动替换
+        // 这里简化策略：直接替换为新厂商的默认值，作为"建议"
+        modelInput.value = providerConfig.defaultModel;
+        modelInput.placeholder = `例如: ${providerConfig.defaultModel}`;
+
+        // 3. 更新 URL 默认值
         urlInput.value = providerConfig.endpoint;
 
-        // Gemini不需要显示URL配置
-        if (provider === "gemini") {
-          urlSection.style.display = "none";
-        } else {
-          urlSection.style.display = "block";
-        }
+        Logger.info(`已切换厂商: ${providerConfig.name}, 请确认模型名称`);
       };
 
       // 显示/隐藏AI Key
@@ -1561,7 +1533,7 @@
 
       // 清空缓存
       document.getElementById("clear_cache").onclick = () => {
-        if (confirm("确定清空所有缓存？")) {
+        if (confirm("确定清空所有缓存?")) {
           CacheManager.clear();
           this.updateStats();
           Logger.success("缓存已清空");
@@ -1603,10 +1575,11 @@
       this.config.ai_provider = document.getElementById("ai_provider").value;
       this.config.ai_key = document.getElementById("ai_k").value.trim();
       this.config.ai_url = document.getElementById("ai_u").value.trim();
-      this.config.ai_model = document.getElementById("ai_model").value;
+      // 直接读取 input 文本框的值
+      this.config.ai_model = document.getElementById("ai_model").value.trim();
       this.config.logLevel = document.getElementById("log_level").value;
 
-      // 设置默认URL
+      // 设置默认URL(如果为空)
       if (!this.config.ai_url) {
         const provider = AI_MODELS[this.config.ai_provider];
         this.config.ai_url = provider.endpoint;
@@ -1615,7 +1588,7 @@
       // 验证配置
       const errors = ConfigManager.validate(this.config);
       if (errors.length > 0) {
-        alert("配置错误：\n\n" + errors.join("\n"));
+        alert("配置错误:\n\n" + errors.join("\n"));
         return;
       }
 
@@ -1629,14 +1602,9 @@
 
       this.updateStats();
 
-      // 显示配置摘要
-      const enabledBanks = this.config.banks.filter((b) => b.enabled);
-      if (enabledBanks.length > 0) {
-        Logger.info(`已启用 ${enabledBanks.length} 个题库`);
-      }
       if (this.config.ai_enabled) {
         const providerName = AI_MODELS[this.config.ai_provider]?.name || "AI";
-        Logger.info(`AI已启用: ${providerName} (${this.config.ai_model})`);
+        Logger.info(`AI已启用: ${providerName} (模型: ${this.config.ai_model})`);
       }
     },
 
@@ -1672,14 +1640,14 @@
 
     async startAnswering() {
       if (this.processing) {
-        Logger.warn("答题进行中，请勿重复点击");
+        Logger.warn("答题进行中,请勿重复点击");
         return;
       }
 
       const questions = QuestionProcessor.detectQuestions();
       if (questions.length === 0) {
         Logger.error("未检测到题目");
-        alert("未检测到题目！\n\n请刷新页面后重试");
+        alert("未检测到题目!\n\n请刷新页面后重试");
         return;
       }
 
@@ -1724,12 +1692,12 @@
       startBtn.textContent = "▶️ 开始答题";
 
       Logger.success(
-        `处理完成！成功: ${results.success}, 跳过: ${results.skipped}, 失败: ${results.failed}, 错误: ${results.error}`
+        `处理完成!成功: ${results.success}, 跳过: ${results.skipped}, 失败: ${results.failed}, 错误: ${results.error}`
       );
 
       setTimeout(() => {
         alert(
-          `答题完成！\n\n` +
+          `答题完成!\n\n` +
             `成功: ${results.success}\n` +
             `跳过: ${results.skipped}\n` +
             `失败: ${results.failed}\n` +
@@ -1819,7 +1787,7 @@
 
       applyAntiDetection();
 
-      Logger.success("脚本加载完成");
+      Logger.success("脚本加载完成 v13.5");
 
       const enabledBanks = config.banks.filter((b) => b.enabled && b.token);
       if (enabledBanks.length > 0) {
@@ -1838,14 +1806,14 @@
       if (questions.length > 0) {
         Logger.success(`检测到 ${questions.length} 道题目`);
         UIManager.updateStatus(
-          `检测到 ${questions.length} 道题，点击开始答题`
+          `检测到 ${questions.length} 道题,点击开始答题`
         );
       } else {
         Logger.info("等待题目加载...");
       }
     } catch (error) {
       console.error("[传智助手] 初始化失败:", error);
-      alert(`脚本初始化失败：${error.message}`);
+      alert(`脚本初始化失败:${error.message}`);
     }
   }
 
