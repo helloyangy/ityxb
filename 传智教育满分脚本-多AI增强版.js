@@ -1,18 +1,20 @@
 // ==UserScript==
 // @name         传智教育满分脚本-多AI增强版 2025.11.22
 // @namespace    https://stu.ityxb.com/
-// @version      13.5
+// @version      13.6
 // @description  多AI模型支持(全手动输入版) + 题库右上角关闭 + 模块化架构 + 性能优化
 // @author       多AI增强版
 // @match        https://stu.ityxb.com/*
 // @connect      tk.enncy.cn
 // @connect      api.openai.com
+// @connect      fyra.im
 // @connect      api.anthropic.com
 // @connect      generativelanguage.googleapis.com
 // @connect      api.deepseek.com
 // @connect      burn.hair
 // @connect      api.chatanywhere.com.cn
 // @connect      openrouter.ai
+// @connect      ollama.com
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addStyle
 // @grant        GM_getValue
@@ -20,6 +22,8 @@
 // @grant        unsafeWindow
 // @run-at       document-end
 // @license      MIT
+// @downloadURL https://update.greasyfork.org/scripts/555204/%E4%BC%A0%E6%99%BA%E6%95%99%E8%82%B2%E6%BB%A1%E5%88%86%E8%84%9A%E6%9C%AC-%E5%A4%9AAI%E5%A2%9E%E5%BC%BA%E7%89%88%2020251122.user.js
+// @updateURL https://update.greasyfork.org/scripts/555204/%E4%BC%A0%E6%99%BA%E6%95%99%E8%82%B2%E6%BB%A1%E5%88%86%E8%84%9A%E6%9C%AC-%E5%A4%9AAI%E5%A2%9E%E5%BC%BA%E7%89%88%2020251122.meta.js
 // ==/UserScript==
 
 (function () {
@@ -57,7 +61,9 @@
         messages: [
           {
             role: "user",
-            content: "你是专业答题助手。直接给出准确答案,不要解释。多个答案用#分隔。\n\n" + question,
+            content:
+              "你是专业答题助手。直接给出准确答案,不要解释。多个答案用#分隔。\n\n" +
+              question,
           },
         ],
       }),
@@ -69,7 +75,8 @@
     gemini: {
       name: "Google Gemini",
       // 注意: URL包含 {model} 占位符
-      endpoint: "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+      endpoint:
+        "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
       defaultModel: "gemini-2.0-flash-exp", // 仅作为建议默认值
       authType: "query",
       formatRequest: (config, question) => ({
@@ -77,7 +84,9 @@
           {
             parts: [
               {
-                text: "你是专业答题助手。直接给出准确答案,不要解释。多个答案用#分隔。\n\n" + question,
+                text:
+                  "你是专业答题助手。直接给出准确答案,不要解释。多个答案用#分隔。\n\n" +
+                  question,
               },
             ],
           },
@@ -87,7 +96,8 @@
           maxOutputTokens: 500,
         },
       }),
-      parseResponse: (data) => data.candidates[0].content.parts[0].text.trim(),
+      parseResponse: (data) =>
+        data.candidates[0].content.parts[0].text.trim(),
       buildUrl: (config) => {
         // 支持用户自定义URL，若URL含{model}则替换
         let url = config.ai_url;
@@ -99,7 +109,7 @@
     },
     deepseek: {
       name: "DeepSeek",
-      endpoint: "https://api.deepseek.com/chat/completions", // 修正为官方最新路径
+      endpoint: "https://api.deepseek.com/chat/completions", // 官方路径
       defaultModel: "deepseek-chat",
       authType: "Bearer",
       formatRequest: (config, question) => ({
@@ -301,6 +311,7 @@
     },
 
     load() {
+      // 为避免用户升级后配置丢失, 仍使用原存储 key
       return GM_getValue("chuanzhi_config_v13_5", this.DEFAULT_CONFIG);
     },
 
@@ -337,7 +348,6 @@
         if (!config.ai_key || config.ai_key.length < 5) {
           errors.push("AI API Key 格式不正确(至少5个字符)");
         }
-        // 移除了URL强制校验，允许localhost等
         if (!config.ai_model) {
           errors.push("AI 模型名称不能为空");
         }
@@ -761,7 +771,8 @@
         }
 
         if (this.config.ai_enabled && this.config.ai_key) {
-          const providerName = AI_MODELS[this.config.ai_provider]?.name || "AI";
+          const providerName =
+            AI_MODELS[this.config.ai_provider]?.name || "AI";
           Logger.info(`第${num}题 使用${providerName}答题`);
           const answer = await APIClient.queryAI(this.config, questionText);
           CacheManager.set(questionText, answer);
@@ -1205,13 +1216,33 @@
     }
 
     .ai-provider-hint {
-      background: rgba(0,255,0,0.05);
-      padding: 10px;
+      background: rgba(0,0,0,0.75);
+      padding: 10px 12px;
       border-radius: 6px;
       margin: 10px 0;
       border-left: 3px solid #0f0;
-      font-size: 12px;
-      line-height: 1.6;
+      font-size: 13px;
+      line-height: 1.7;
+      color: #c8ffc8;
+    }
+
+    .ai-provider-hint strong {
+      color: #ffff66;
+      font-weight: bold;
+    }
+
+    .ai-provider-hint code {
+      display: inline-block;
+      padding: 3px 8px;
+      margin: 3px 4px 0 0;
+      border-radius: 6px;
+      background: rgba(0,0,0,0.95);
+      border: 1px solid #ffff66;
+      color: #ffff66;
+      font-size: 13px;
+      font-weight: bold;
+      font-family: "Consolas","Monaco",monospace;
+      text-shadow: 0 0 5px rgba(255,255,102,0.7);
     }
   `);
 
@@ -1233,7 +1264,7 @@
       panel.id = "FIX_PANEL";
       panel.innerHTML = `
         <div id="panel_header">
-          <span style="font-size:18px;">📊 传智满分助手 v13.5</span>
+          <span style="font-size:18px;">📊 传智满分助手 v13.6</span>
           <button id="minimize_btn" title="最小化/还原">−</button>
         </div>
         <div id="panel_content">
@@ -1308,11 +1339,6 @@
             启用AI答题(题库找不到时使用)
           </label>
 
-          <div class="ai-provider-hint">
-            💡 <strong>提示:</strong> 模型名称需手动输入，无需等待脚本更新。<br>
-            例如: <code>gpt-4o</code>, <code>deepseek-chat</code>, <code>gemini-2.0-flash</code>
-          </div>
-
           <label style="font-size: 14px; margin-top: 10px;">AI提供商:</label>
           <select id="ai_provider">
             ${aiProviderOptions}
@@ -1329,19 +1355,23 @@
           </div>
 
           <label style="font-size: 14px; margin-top: 10px;">模型名称 (手动输入):</label>
-          <!-- 纯文本输入框，移除 Select -->
-          <input type="text" id="ai_model" value="${this.config.ai_model}" placeholder="例如: gpt-4o-mini">
+          <input type="text" id="ai_model" value="${
+            this.config.ai_model
+          }" placeholder="例如: gpt-4o-mini">
 
           <div id="ai_url_section">
             <label style="font-size: 14px; margin-top: 10px;">API地址 (URL):</label>
             <input type="text" id="ai_u" placeholder="API 请求地址" value="${
               this.config.ai_url
             }">
-             <div class="ai-provider-hint" style="margin-top:5px; font-size:11px; padding:5px;">
-                Gemini 官方需保留 {model} 占位符
-             </div>
+            <div class="ai-provider-hint" style="margin-top:5px; font-size:11px; padding:5px;">
+              <strong>提示:</strong> 使用 Gemini 官方接口时, URL 中需保留 <code>{model}</code> 占位符, 由脚本自动替换为上方模型名称。
+            </div>
           </div>
 
+          <button id="test_ai" class="cfg-btn" style="background: linear-gradient(135deg, #ffff66, #ffcc00) !important; margin-top: 10px;">
+            🔍 测试AI连通性
+          </button>
         </div>
 
         <div class="cfg-section">
@@ -1502,23 +1532,18 @@
         Logger.info("已添加新题库");
       };
 
-      // ======= 核心修改: AI提供商切换 (纯文本输入版) =======
+      // AI提供商切换
       document.getElementById("ai_provider").onchange = (e) => {
         const provider = e.target.value;
         const providerConfig = AI_MODELS[provider];
         const urlInput = document.getElementById("ai_u");
-        const modelInput = document.getElementById("ai_model"); // 现在是 input text
+        const modelInput = document.getElementById("ai_model");
 
-        // 1. 更新当前配置 Provider
         this.config.ai_provider = provider;
 
-        // 2. 填充建议的默认值 (用户可随意修改)
-        // 只有当输入框为空，或者值为其他厂商的默认值时，才自动替换
-        // 这里简化策略：直接替换为新厂商的默认值，作为"建议"
         modelInput.value = providerConfig.defaultModel;
         modelInput.placeholder = `例如: ${providerConfig.defaultModel}`;
 
-        // 3. 更新 URL 默认值
         urlInput.value = providerConfig.endpoint;
 
         Logger.info(`已切换厂商: ${providerConfig.name}, 请确认模型名称`);
@@ -1558,6 +1583,11 @@
         Logger.success("日志已导出");
       };
 
+      // 测试 AI 按钮
+      document.getElementById("test_ai").onclick = () => {
+        this.testAIConfig();
+      };
+
       // ESC键关闭配置
       document.addEventListener("keydown", (e) => {
         if (
@@ -1569,13 +1599,52 @@
       });
     },
 
+    async testAIConfig() {
+      try {
+        const ai_enabled = document.getElementById("ai_sw").checked;
+        const ai_key = document.getElementById("ai_k").value.trim();
+        const ai_provider = document.getElementById("ai_provider").value;
+        let ai_url = document.getElementById("ai_u").value.trim();
+        const ai_model = document.getElementById("ai_model").value.trim();
+
+        if (!ai_enabled) {
+          alert("请先勾选【启用AI答题】再测试。");
+          return;
+        }
+        if (!ai_key || !ai_model) {
+          alert("请先填写 API Key 和 模型名称。");
+          return;
+        }
+
+        if (!ai_url) {
+          ai_url = AI_MODELS[ai_provider].endpoint;
+        }
+
+        const tempConfig = {
+          ai_enabled: true,
+          ai_provider,
+          ai_key,
+          ai_url,
+          ai_model,
+        };
+
+        Logger.info("正在测试 AI 配置，请稍等...");
+        const res = await APIClient.queryAI(tempConfig, "只需回复: OK");
+        const preview = (res || "").toString().slice(0, 50);
+        Logger.success("AI 测试成功, 返回: " + preview);
+        alert("AI 测试成功！\n返回内容(前50字):\n" + preview);
+      } catch (err) {
+        Logger.error("AI 测试失败: " + err.message);
+        alert("AI 测试失败:\n" + err.message);
+      }
+    },
+
     saveConfig() {
       // 读取配置
       this.config.ai_enabled = document.getElementById("ai_sw").checked;
       this.config.ai_provider = document.getElementById("ai_provider").value;
       this.config.ai_key = document.getElementById("ai_k").value.trim();
       this.config.ai_url = document.getElementById("ai_u").value.trim();
-      // 直接读取 input 文本框的值
       this.config.ai_model = document.getElementById("ai_model").value.trim();
       this.config.logLevel = document.getElementById("log_level").value;
 
@@ -1603,8 +1672,11 @@
       this.updateStats();
 
       if (this.config.ai_enabled) {
-        const providerName = AI_MODELS[this.config.ai_provider]?.name || "AI";
-        Logger.info(`AI已启用: ${providerName} (模型: ${this.config.ai_model})`);
+        const providerName =
+          AI_MODELS[this.config.ai_provider]?.name || "AI";
+        Logger.info(
+          `AI已启用: ${providerName} (模型: ${this.config.ai_model})`
+        );
       }
     },
 
@@ -1616,7 +1688,8 @@
 
       const aiStatus = document.getElementById("ai_status");
       if (this.config.ai_enabled) {
-        const providerName = AI_MODELS[this.config.ai_provider]?.name || "未知";
+        const providerName =
+          AI_MODELS[this.config.ai_provider]?.name || "未知";
         aiStatus.textContent = `${providerName}`;
         aiStatus.style.color = "#0f0";
       } else {
@@ -1753,11 +1826,14 @@
     },
   };
 
-  // ================ 防检测 ================
-  function applyAntiDetection() {
-    if (!window.location.href.includes("/writePaper/")) return;
+// ================ 防检测 ================
+function applyAntiDetection() {
+  // 只在写卷页面启用
+  if (!window.location.href.includes("/writePaper/")) return;
 
-    ["visibilitychange", "blur", "focus"].forEach((e) => {
+  try {
+    // 拦截可见性 / 焦点事件，防止被监控切屏
+    ["visibilitychange", "webkitvisibilitychange", "mozvisibilitychange", "msvisibilitychange", "blur", "focus"].forEach((e) => {
       window.addEventListener(
         e,
         (ev) => ev.stopImmediatePropagation(),
@@ -1765,15 +1841,34 @@
       );
     });
 
-    Object.defineProperty(document, "hidden", {
-      get: () => false,
-      configurable: true,
-    });
+    // 兼容地处理 document.hidden：如果是可配置的才去重写
+    const desc =
+      Object.getOwnPropertyDescriptor(document, "hidden") ||
+      Object.getOwnPropertyDescriptor(Document.prototype || {}, "hidden");
 
-    document.hasFocus = () => true;
+    if (!desc || desc.configurable) {
+      Object.defineProperty(document, "hidden", {
+        get: () => false,
+        configurable: true,
+      });
+      Logger.debug("已重写 document.hidden 属性");
+    } else {
+      // 某些浏览器中该属性不可配置，强行重写会报错，这里直接跳过即可
+      Logger.debug("document.hidden 为不可配置属性，跳过重写");
+    }
 
-    Logger.debug("防检测已启用");
+    // hasFocus 直接覆盖即可，通常不会抛错
+    if (typeof document.hasFocus === "function") {
+      document.hasFocus = () => true;
+      Logger.debug("已重写 document.hasFocus");
+    }
+
+    Logger.debug("防检测已启用(兼容模式)");
+  } catch (e) {
+    // 所有异常都吃掉，只打日志，不让 init 整体失败
+    Logger.warn("防检测启用失败, 已降级处理: " + e.message);
   }
+}
 
   // ================ 主初始化 ================
   async function init() {
@@ -1787,7 +1882,7 @@
 
       applyAntiDetection();
 
-      Logger.success("脚本加载完成 v13.5");
+      Logger.success("脚本加载完成 v13.6");
 
       const enabledBanks = config.banks.filter((b) => b.enabled && b.token);
       if (enabledBanks.length > 0) {
@@ -1797,7 +1892,8 @@
       }
 
       if (config.ai_enabled && config.ai_key) {
-        const providerName = AI_MODELS[config.ai_provider]?.name || "AI";
+        const providerName =
+          AI_MODELS[config.ai_provider]?.name || "AI";
         Logger.info(`AI已启用: ${providerName} (${config.ai_model})`);
       }
 
