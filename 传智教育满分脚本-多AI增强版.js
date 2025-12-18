@@ -1,20 +1,11 @@
 // ==UserScript==
-// @name         传智教育满分脚本-多AI增强版 2025.11.22
+// @name         传智教育满分脚本-多AI增强版（判断题彻底修复）
 // @namespace    https://stu.ityxb.com/
-// @version      13.6
-// @description  多AI模型支持(全手动输入版) + 题库右上角关闭 + 模块化架构 + 性能优化
+// @version      13.12
+// @description  v13.12：彻底修复判断题"AI答案解析失败"问题
 // @author       多AI增强版
 // @match        https://stu.ityxb.com/*
-// @connect      tk.enncy.cn
-// @connect      api.openai.com
-// @connect      fyra.im
-// @connect      api.anthropic.com
-// @connect      generativelanguage.googleapis.com
-// @connect      api.deepseek.com
-// @connect      burn.hair
-// @connect      api.chatanywhere.com.cn
-// @connect      openrouter.ai
-// @connect      ollama.com
+// @connect      *
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addStyle
 // @grant        GM_getValue
@@ -22,139 +13,118 @@
 // @grant        unsafeWindow
 // @run-at       document-end
 // @license      MIT
-// @downloadURL https://update.greasyfork.org/scripts/555204/%E4%BC%A0%E6%99%BA%E6%95%99%E8%82%B2%E6%BB%A1%E5%88%86%E8%84%9A%E6%9C%AC-%E5%A4%9AAI%E5%A2%9E%E5%BC%BA%E7%89%88%2020251122.user.js
-// @updateURL https://update.greasyfork.org/scripts/555204/%E4%BC%A0%E6%99%BA%E6%95%99%E8%82%B2%E6%BB%A1%E5%88%86%E8%84%9A%E6%9C%AC-%E5%A4%9AAI%E5%A2%9E%E5%BC%BA%E7%89%88%2020251122.meta.js
 // ==/UserScript==
 
 (function () {
   "use strict";
 
-  // ================ AI 模型配置 (无预设列表，全手动) ================
+  // ================ AI 模型配置 ================
   const AI_MODELS = {
     openai: {
       name: "OpenAI (GPT)",
       endpoint: "https://api.openai.com/v1/chat/completions",
-      defaultModel: "gpt-4o-mini", // 仅作为建议默认值
+      defaultModel: "gpt-4o-mini",
       authType: "Bearer",
-      formatRequest: (config, question) => ({
+      formatRequest: (config, prompt) => ({
         model: config.ai_model,
         temperature: 0.1,
-        max_tokens: 500,
+        max_tokens: 700,
         messages: [
-          {
-            role: "system",
-            content: "你是专业答题助手。直接给出准确答案,不要解释。多个答案用#分隔。",
-          },
-          { role: "user", content: question },
+          { role: "system", content: "你是专业答题助手。严格按用户要求输出。" },
+          { role: "user", content: prompt },
         ],
       }),
-      parseResponse: (data) => data.choices[0].message.content.trim(),
+      parseResponse: (data) =>
+        data.choices?.[0]?.message?.content?.trim?.() || "",
     },
+
     claude: {
       name: "Claude (Anthropic)",
       endpoint: "https://api.anthropic.com/v1/messages",
-      defaultModel: "claude-3-5-sonnet-20241022", // 仅作为建议默认值
+      defaultModel: "claude-3-5-sonnet-20241022",
       authType: "x-api-key",
-      formatRequest: (config, question) => ({
+      formatRequest: (config, prompt) => ({
         model: config.ai_model,
-        max_tokens: 500,
-        messages: [
-          {
-            role: "user",
-            content:
-              "你是专业答题助手。直接给出准确答案,不要解释。多个答案用#分隔。\n\n" +
-              question,
-          },
-        ],
+        max_tokens: 700,
+        messages: [{ role: "user", content: prompt }],
       }),
-      parseResponse: (data) => data.content[0].text.trim(),
-      extraHeaders: (config) => ({
-        "anthropic-version": "2023-06-01",
-      }),
+      parseResponse: (data) => data?.content?.[0]?.text?.trim?.() || "",
+      extraHeaders: () => ({ "anthropic-version": "2023-06-01" }),
     },
+
     gemini: {
       name: "Google Gemini",
-      // 注意: URL包含 {model} 占位符
       endpoint:
         "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-      defaultModel: "gemini-2.0-flash-exp", // 仅作为建议默认值
+      defaultModel: "gemini-2.0-flash-exp",
       authType: "query",
-      formatRequest: (config, question) => ({
-        contents: [
-          {
-            parts: [
-              {
-                text:
-                  "你是专业答题助手。直接给出准确答案,不要解释。多个答案用#分隔。\n\n" +
-                  question,
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 500,
-        },
+      formatRequest: (config, prompt) => ({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.1, maxOutputTokens: 700 },
       }),
       parseResponse: (data) =>
-        data.candidates[0].content.parts[0].text.trim(),
+        data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim?.() || "",
+
       buildUrl: (config) => {
-        // 支持用户自定义URL，若URL含{model}则替换
-        let url = config.ai_url;
-        if (url.includes("{model}")) {
-          url = url.replace("{model}", config.ai_model);
+        let url = (config.ai_url || "").trim();
+        const model = (config.ai_model || "").trim();
+        const key = (config.ai_key || "").trim();
+
+        if (!url) url = AI_MODELS.gemini.endpoint;
+        if (url.includes("{model}"))
+          url = url.replace("{model}", encodeURIComponent(model));
+
+        const keyPlaceholders = ["{key}", "{apiKey}", "{apikey}"];
+        for (const ph of keyPlaceholders) {
+          if (url.includes(ph)) return url.replace(ph, encodeURIComponent(key));
         }
-        return `${url}?key=${config.ai_key}`;
+
+        const hasKeyParam = /[?&]key=/.test(url);
+        if (!hasKeyParam)
+          url +=
+            (url.includes("?") ? "&" : "?") + "key=" + encodeURIComponent(key);
+        return url;
       },
     },
+
     deepseek: {
       name: "DeepSeek",
-      endpoint: "https://api.deepseek.com/chat/completions", // 官方路径
+      endpoint: "https://api.deepseek.com/chat/completions",
       defaultModel: "deepseek-chat",
       authType: "Bearer",
-      formatRequest: (config, question) => ({
+      formatRequest: (config, prompt) => ({
         model: config.ai_model,
         temperature: 0.1,
-        max_tokens: 500,
+        max_tokens: 700,
         messages: [
-          {
-            role: "system",
-            content: "你是专业答题助手。直接给出准确答案,不要解释。多个答案用#分隔。",
-          },
-          { role: "user", content: question },
+          { role: "system", content: "你是专业答题助手。严格按用户要求输出。" },
+          { role: "user", content: prompt },
         ],
       }),
-      parseResponse: (data) => data.choices[0].message.content.trim(),
+      parseResponse: (data) =>
+        data.choices?.[0]?.message?.content?.trim?.() || "",
     },
+
     custom: {
       name: "自定义 API",
       endpoint: "",
       defaultModel: "custom-model",
       authType: "Bearer",
-      formatRequest: (config, question) => ({
+      formatRequest: (config, prompt) => ({
         model: config.ai_model,
         temperature: 0.1,
-        max_tokens: 500,
+        max_tokens: 700,
         messages: [
-          {
-            role: "system",
-            content: "你是专业答题助手。直接给出准确答案,不要解释。多个答案用#分隔。",
-          },
-          { role: "user", content: question },
+          { role: "system", content: "你是专业答题助手。严格按用户要求输出。" },
+          { role: "user", content: prompt },
         ],
       }),
       parseResponse: (data) => {
-        // 尝试多种解析格式
-        if (data.choices && data.choices[0] && data.choices[0].message) {
+        if (data.choices?.[0]?.message?.content)
           return data.choices[0].message.content.trim();
-        }
-        if (data.content && data.content[0] && data.content[0].text) {
-          return data.content[0].text.trim();
-        }
-        if (data.response) {
-          return data.response.trim();
-        }
-        throw new Error("无法解析响应格式");
+        if (data.content?.[0]?.text) return data.content[0].text.trim();
+        if (data.response) return String(data.response).trim();
+        return JSON.stringify(data);
       },
     },
   };
@@ -163,35 +133,42 @@
   const Utils = {
     sanitizeHTML(str) {
       const div = document.createElement("div");
-      div.textContent = str;
+      div.textContent = str ?? "";
       return div.innerHTML;
     },
 
     normalizeText(text) {
-      return text
-        .replace(/^[A-Z]\.?\s*/, "")
+      return (text || "")
+        .replace(/^[A-Z]\.?\s*/i, "")
         .replace(/[\s\n\r\t]+/g, "")
         .toLowerCase()
         .trim();
     },
 
-    throttle(fn, delay) {
-      let lastCall = 0;
-      return function (...args) {
-        const now = Date.now();
-        if (now - lastCall >= delay) {
-          lastCall = now;
-          return fn.apply(this, args);
-        }
-      };
+    normalizeForCache(text) {
+      return (text || "")
+        .replace(/[\u00A0]/g, " ")
+        .replace(/[\s\n\r\t]+/g, " ")
+        .trim()
+        .toLowerCase();
     },
 
-    debounce(fn, delay) {
-      let timer = null;
-      return function (...args) {
-        clearTimeout(timer);
-        timer = setTimeout(() => fn.apply(this, args), delay);
-      };
+    hash32(str) {
+      let h = 0x811c9dc5;
+      for (let i = 0; i < str.length; i++) {
+        h ^= str.charCodeAt(i);
+        h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+      }
+      return ("00000000" + h.toString(16)).slice(-8);
+    },
+
+    buildQuestionFingerprint({ questionText, optionTexts, qType }) {
+      const q = this.normalizeForCache(questionText);
+      const opts = (optionTexts || [])
+        .map((t) => this.normalizeForCache(t))
+        .join("|");
+      const raw = `v2|type=${qType}|q=${q}|opts=${opts}`;
+      return "QF_" + this.hash32(raw);
     },
 
     sleep(ms) {
@@ -201,7 +178,7 @@
     encrypt(text, salt = "chuanzhi_v13") {
       try {
         return btoa(
-          text
+          String(text || "")
             .split("")
             .map((c, i) =>
               String.fromCharCode(
@@ -210,14 +187,14 @@
             )
             .join("")
         );
-      } catch (e) {
-        return text;
+      } catch (_) {
+        return String(text || "");
       }
     },
 
     decrypt(encrypted, salt = "chuanzhi_v13") {
       try {
-        return atob(encrypted)
+        return atob(String(encrypted || ""))
           .split("")
           .map((c, i) =>
             String.fromCharCode(
@@ -225,9 +202,262 @@
             )
           )
           .join("");
-      } catch (e) {
-        return encrypted;
+      } catch (_) {
+        return String(encrypted || "");
       }
+    },
+
+    safeJsonExtract(text) {
+      const s = (text || "").trim();
+      if (!s) return null;
+
+      try {
+        return JSON.parse(s);
+      } catch (_) {}
+
+      const firstObj = s.indexOf("{");
+      const lastObj = s.lastIndexOf("}");
+      if (firstObj !== -1 && lastObj !== -1 && lastObj > firstObj) {
+        const sub = s.slice(firstObj, lastObj + 1);
+        try {
+          return JSON.parse(sub);
+        } catch (_) {}
+      }
+
+      const firstArr = s.indexOf("[");
+      const lastArr = s.lastIndexOf("]");
+      if (firstArr !== -1 && lastArr !== -1 && lastArr > firstArr) {
+        const sub = s.slice(firstArr, lastArr + 1);
+        try {
+          return JSON.parse(sub);
+        } catch (_) {}
+      }
+
+      return null;
+    },
+
+    lettersToArray(s) {
+      const up = (s || "").toUpperCase();
+      const matches = up.match(/[A-Z]/g);
+      if (!matches) return [];
+      return Array.from(new Set(matches));
+    },
+  };
+
+  // ================ 答案解析模块 ================
+  const AnswerParser = {
+    typeName(qType) {
+      if (qType === "0") return "单选";
+      if (qType === "1") return "多选";
+      if (qType === "2") return "填空";
+      if (qType === "3") return "判断";
+      return "单选";
+    },
+
+    buildAIPrompt({ questionText, qType, optionMap }) {
+      const typeName = this.typeName(qType);
+      const lines = [];
+
+      lines.push("你是专业答题助手。");
+      lines.push("任务：根据题目和选项给出正确答案。");
+      lines.push(
+        "重要：只输出 JSON，不要输出任何解释、前后缀文本、代码块标记。"
+      );
+      lines.push("");
+      lines.push(`题型：${typeName}`);
+      lines.push(`题目：${questionText}`);
+
+      if (qType === "0" || qType === "1" || qType === "3") {
+        lines.push("选项：");
+        for (const item of optionMap)
+          lines.push(`${item.letter}. ${item.text}`);
+      }
+
+      lines.push("");
+      lines.push("输出 JSON 格式要求：");
+      lines.push('1) 单选/多选：{"answers":["A"]} 或 {"answers":["A","C"]}');
+      lines.push('2) 判断：{"answers":["正确"]} 或 {"answers":["错误"]}');
+      lines.push('3) 填空：{"answers":["第1空","第2空"]}（按空的顺序）');
+      lines.push("");
+      lines.push("再次强调：只输出 JSON。");
+
+      return lines.join("\n");
+    },
+
+    normalizeRawToAnswers(raw) {
+      if (raw == null) return { answers: [] };
+
+      if (typeof raw === "object") {
+        const arr = raw.answers || raw.answer || raw.data || raw.result;
+        if (Array.isArray(arr))
+          return { answers: arr.map((x) => String(x).trim()).filter(Boolean) };
+        if (typeof arr === "string")
+          return {
+            answers: arr
+              .split("#")
+              .map((x) => x.trim())
+              .filter(Boolean),
+          };
+        return { answers: [JSON.stringify(raw)] };
+      }
+
+      const s = String(raw).trim();
+      if (!s) return { answers: [] };
+
+      const js = Utils.safeJsonExtract(s);
+      if (js) {
+        if (Array.isArray(js))
+          return { answers: js.map((x) => String(x).trim()).filter(Boolean) };
+        if (typeof js === "object") {
+          const a = js.answers ?? js.answer ?? js.data ?? js.result;
+          if (Array.isArray(a))
+            return { answers: a.map((x) => String(x).trim()).filter(Boolean) };
+          if (typeof a === "string")
+            return {
+              answers: a
+                .split("#")
+                .map((x) => x.trim())
+                .filter(Boolean),
+            };
+        }
+      }
+
+      return {
+        answers: s
+          .split("#")
+          .map((x) => x.trim())
+          .filter(Boolean),
+      };
+    },
+
+    normalizeJudgeToken(token) {
+      const t = Utils.normalizeText(token);
+      if (!t) return null;
+
+      const yes = [
+        "正确",
+        "对",
+        "是",
+        "true",
+        "yes",
+        "√",
+        "✓",
+        "✔",
+        "y",
+        "t",
+        "right",
+        "correct",
+        "正确的",
+        "对的",
+        "是的",
+        "真",
+        "成立",
+      ];
+
+      const no = [
+        "错误",
+        "错",
+        "否",
+        "false",
+        "no",
+        "×",
+        "✗",
+        "✘",
+        "n",
+        "f",
+        "wrong",
+        "incorrect",
+        "错误的",
+        "错的",
+        "不是",
+        "假",
+        "不成立",
+      ];
+
+      for (const k of yes)
+        if (t.includes(Utils.normalizeText(k))) return "正确";
+      for (const k of no) if (t.includes(Utils.normalizeText(k))) return "错误";
+
+      return null;
+    },
+
+    judgeFromLetterByOptions(letter, optionMap) {
+      const L = String(letter).trim().toUpperCase();
+      const opt = optionMap.find((x) => x.letter.toUpperCase() === L);
+      if (!opt) return null;
+      return this.normalizeJudgeToken(opt.text);
+    },
+
+    resolveChoiceLetters({ qType, answers, optionMap }) {
+      // 判断题
+      if (qType === "3") {
+        let judge = null;
+
+        for (const a of answers || []) {
+          judge = this.normalizeJudgeToken(a);
+          if (judge) break;
+        }
+        if (!judge) {
+          const combined = (answers || []).join(" ");
+          judge = this.normalizeJudgeToken(combined);
+        }
+        if (!judge) return [];
+
+        // ✅ 关键：把“正确/错误”转换成真正的布尔
+        const judgeBool = (judge === "正确");
+
+        // 优先按选项文本匹配“对/错”
+        const pick = (wantCorrect) => {
+          for (const opt of optionMap || []) {
+            const t = this.normalizeJudgeToken(opt.text);
+            if (!t) continue;
+            if (wantCorrect && t === "正确") return opt.letter;
+            if (!wantCorrect && t === "错误") return opt.letter;
+          }
+          return null;
+        };
+
+        const byText = pick(judgeBool);
+        if (byText) return [byText];
+
+        // 兜底：只有两项时按顺序选（“错误”必须走第二项）
+        if ((optionMap || []).length === 2) {
+          return [judgeBool ? optionMap[0].letter : optionMap[1].letter];
+        }
+        return [];
+      }
+
+      // 单选/多选（保持原来的字母提取思路）
+      const letters = [];
+      for (const a of answers || []) {
+        const token = String(a).trim().toUpperCase();
+        const m = token.match(/[A-Z]/g);
+        if (m) letters.push(...m);
+      }
+      const uniq = Array.from(new Set(letters)).filter(Boolean);
+
+      // 单选只取一个
+      if (qType === "0") return uniq.length ? [uniq[0]] : [];
+      return uniq;
+    },
+
+    resolveBlankAnswers({ answers, blankCount }) {
+      let arr = answers.slice();
+      if (blankCount > 1 && arr.length === 1) {
+        const one = String(arr[0] || "");
+        const spl = one
+          .split(/[#\n\r\t]|、|，|,|；|;|\|\|/g)
+          .map((x) => x.trim())
+          .filter(Boolean);
+        if (spl.length >= 2) arr = spl;
+      }
+      return arr;
+    },
+
+    toDisplayString(qType, resolved) {
+      if (!resolved || !resolved.answers || resolved.answers.length === 0)
+        return "";
+      return resolved.answers.join("#");
     },
   };
 
@@ -239,7 +469,6 @@
     get(key) {
       const cache = GM_getValue("tiku_cache_v13", {});
       const item = cache[key];
-
       if (!item) return null;
 
       if (item.timestamp) {
@@ -251,7 +480,6 @@
           return null;
         }
       }
-
       return item.answer;
     },
 
@@ -262,17 +490,12 @@
         const entries = Object.entries(cache)
           .sort((a, b) => (a[1].timestamp || 0) - (b[1].timestamp || 0))
           .slice(Math.floor(this.MAX_SIZE * 0.2));
-
         const newCache = {};
         entries.forEach(([k, v]) => (newCache[k] = v));
         GM_setValue("tiku_cache_v13", newCache);
       }
 
-      cache[key] = {
-        answer: answer,
-        timestamp: Date.now(),
-      };
-
+      cache[key] = { answer: answer, timestamp: Date.now() };
       GM_setValue("tiku_cache_v13", cache);
     },
 
@@ -288,14 +511,12 @@
   // ================ 配置管理模块 ================
   const ConfigManager = {
     DEFAULT_CONFIG: {
-      // AI配置
       ai_enabled: false,
-      ai_provider: "openai", // openai, claude, gemini, deepseek, custom
+      ai_provider: "openai",
       ai_key: "",
       ai_url: "https://api.openai.com/v1/chat/completions",
       ai_model: "gpt-4o-mini",
 
-      // 题库配置
       banks: [
         {
           name: "言溪题库",
@@ -311,53 +532,41 @@
     },
 
     load() {
-      // 为避免用户升级后配置丢失, 仍使用原存储 key
       return GM_getValue("chuanzhi_config_v13_5", this.DEFAULT_CONFIG);
     },
 
     save(config) {
       const saveConfig = JSON.parse(JSON.stringify(config));
-      if (saveConfig.ai_key) {
+      if (saveConfig.ai_key)
         saveConfig.ai_key = Utils.encrypt(saveConfig.ai_key);
-      }
       saveConfig.banks.forEach((bank) => {
-        if (bank.token) {
-          bank.token = Utils.encrypt(bank.token);
-        }
+        if (bank.token) bank.token = Utils.encrypt(bank.token);
       });
-
       GM_setValue("chuanzhi_config_v13_5", saveConfig);
     },
 
     decrypt(config) {
-      if (config.ai_key) {
-        config.ai_key = Utils.decrypt(config.ai_key);
-      }
+      if (config.ai_key) config.ai_key = Utils.decrypt(config.ai_key);
       config.banks.forEach((bank) => {
-        if (bank.token) {
-          bank.token = Utils.decrypt(bank.token);
-        }
+        if (bank.token) bank.token = Utils.decrypt(bank.token);
       });
       return config;
     },
 
     validate(config) {
       const errors = [];
-
       if (config.ai_enabled) {
-        if (!config.ai_key || config.ai_key.length < 5) {
+        if (!config.ai_key || config.ai_key.length < 5)
           errors.push("AI API Key 格式不正确(至少5个字符)");
-        }
-        if (!config.ai_model) {
-          errors.push("AI 模型名称不能为空");
-        }
+        if (!config.ai_model) errors.push("AI 模型名称不能为空");
+        if (!config.ai_url || !config.ai_url.match(/^https?:\/\/.+/))
+          errors.push("AI API 地址(URL) 格式不正确");
       }
 
       config.banks.forEach((bank, i) => {
         if (bank.enabled) {
-          if (!bank.url || !bank.url.match(/^https?:\/\/.+/)) {
+          if (!bank.url || !bank.url.match(/^https?:\/\/.+/))
             errors.push(`题库 ${i + 1} URL 格式不正确`);
-          }
         }
       });
 
@@ -375,28 +584,6 @@
       a.click();
       URL.revokeObjectURL(url);
     },
-
-    import(file) {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          try {
-            const config = JSON.parse(e.target.result);
-            const errors = this.validate(config);
-            if (errors.length > 0) {
-              reject(new Error(errors.join("\n")));
-            } else {
-              this.save(config);
-              resolve(config);
-            }
-          } catch (error) {
-            reject(new Error("配置文件格式错误"));
-          }
-        };
-        reader.onerror = () => reject(new Error("文件读取失败"));
-        reader.readAsText(file);
-      });
-    },
   };
 
   // ================ 日志管理模块 ================
@@ -407,11 +594,11 @@
     logs: [],
 
     init(level = "INFO") {
-      this.currentLevel = this.LEVELS[level] || this.LEVELS.INFO;
+      this.currentLevel = this.LEVELS[level] ?? this.LEVELS.INFO;
     },
 
     log(msg, level = "INFO") {
-      const levelValue = this.LEVELS[level] || this.LEVELS.INFO;
+      const levelValue = this.LEVELS[level] ?? this.LEVELS.INFO;
       if (levelValue < this.currentLevel) return;
 
       const logDiv = document.getElementById("fix_log");
@@ -430,24 +617,22 @@
       entry.className = "log-e";
       const time = new Date().toLocaleTimeString("zh-CN", { hour12: false });
       entry.innerHTML = `
-        <span style="color:${colors[level] || "#0ff"};">[${time}] [${level}]</span>
+        <span style="color:${
+          colors[level] || "#0ff"
+        };">[${time}] [${level}]</span>
         ${Utils.sanitizeHTML(msg)}
       `;
 
       logDiv.insertBefore(entry, logDiv.firstChild);
-
-      while (logDiv.children.length > this.maxLogs) {
+      while (logDiv.children.length > this.maxLogs)
         logDiv.removeChild(logDiv.lastChild);
-      }
 
       const consoleMethod =
         level === "ERROR" ? "error" : level === "WARN" ? "warn" : "log";
       console[consoleMethod](`[传智助手] ${msg}`);
 
       this.logs.push({ time, level, msg });
-      if (this.logs.length > this.maxLogs) {
-        this.logs.shift();
-      }
+      if (this.logs.length > this.maxLogs) this.logs.shift();
     },
 
     debug(msg) {
@@ -529,13 +714,12 @@
         GM_xmlhttpRequest({
           ...options,
           onload: (response) => {
-            if (response.status >= 200 && response.status < 300) {
+            if (response.status >= 200 && response.status < 300)
               resolve(response);
-            } else {
+            else
               reject(
                 new Error(`HTTP ${response.status}: ${response.statusText}`)
               );
-            }
           },
           onerror: (error) =>
             reject(new Error(`网络错误: ${error.error || "未知错误"}`)),
@@ -555,7 +739,7 @@
         type: type,
       };
 
-      if (bank.method === "GET") {
+      if ((bank.method || "GET").toUpperCase() === "GET") {
         const query = new URLSearchParams(params);
         url += (url.includes("?") ? "&" : "?") + query.toString();
       }
@@ -564,56 +748,42 @@
         method: bank.method || "GET",
         url: url,
         headers: { "Content-Type": "application/json" },
-        data: bank.method === "POST" ? JSON.stringify(params) : undefined,
+        data:
+          (bank.method || "GET").toUpperCase() === "POST"
+            ? JSON.stringify(params)
+            : undefined,
         timeout: 10000,
       });
 
       const data = JSON.parse(response.responseText);
 
       let answer = null;
-      if (data.code === 0 && data.data) {
-        answer = data.data.answer || data.data;
-      } else if (data.answer) {
-        answer = data.answer;
-      } else if (data.data) {
-        answer = data.data;
-      }
+      if (data.code === 0 && data.data) answer = data.data.answer || data.data;
+      else if (data.answer) answer = data.answer;
+      else if (data.data) answer = data.data;
 
-      if (answer && typeof answer === "string" && answer.length > 0) {
+      if (answer && typeof answer === "string" && answer.length > 0)
         return answer;
-      }
 
       throw new Error("未找到答案");
     },
 
-    async queryAI(config, question) {
+    async queryAI(config, prompt) {
       await RateLimiter.throttle();
 
       const provider = AI_MODELS[config.ai_provider] || AI_MODELS.openai;
-      const requestData = provider.formatRequest(config, question);
+      const requestData = provider.formatRequest(config, prompt);
 
-      // 构建请求头
-      const headers = {
-        "Content-Type": "application/json",
-      };
-
-      // 根据不同的认证类型设置请求头
-      if (provider.authType === "Bearer") {
+      const headers = { "Content-Type": "application/json" };
+      if (provider.authType === "Bearer")
         headers.Authorization = `Bearer ${config.ai_key}`;
-      } else if (provider.authType === "x-api-key") {
+      else if (provider.authType === "x-api-key")
         headers["x-api-key"] = config.ai_key;
-      }
-
-      // 添加额外的请求头
-      if (provider.extraHeaders) {
+      if (provider.extraHeaders)
         Object.assign(headers, provider.extraHeaders(config));
-      }
 
-      // 构建请求URL
       let url = config.ai_url;
-      if (provider.buildUrl) {
-        url = provider.buildUrl(config);
-      }
+      if (provider.buildUrl) url = provider.buildUrl(config);
 
       const response = await this.request({
         method: "POST",
@@ -626,12 +796,32 @@
       const data = JSON.parse(response.responseText);
       return provider.parseResponse(data);
     },
+
+    async queryAIWithRepair(config, prompt, repairContext = "") {
+      const raw = await this.queryAI(config, prompt);
+
+      const js = Utils.safeJsonExtract(raw);
+      if (js) return raw;
+
+      const repairPrompt = [
+        "把下面内容转换为 JSON，且只输出 JSON（不要解释/不要代码块）。",
+        '目标格式：{"answers":[...]}',
+        repairContext ? `上下文：${repairContext}` : "",
+        "内容：",
+        raw,
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      Logger.warn("AI输出非JSON，启动修复请求一次...");
+      const raw2 = await this.queryAI(config, repairPrompt);
+      return raw2;
+    },
   };
 
   // ================ 题目处理模块 ================
   const QuestionProcessor = {
     config: null,
-    elementCache: new WeakMap(),
 
     init(config) {
       this.config = config;
@@ -644,7 +834,6 @@
         ".question-item",
         ".item-box",
       ];
-
       for (const sel of selectors) {
         const questions = document.querySelectorAll(sel);
         if (questions.length > 0) {
@@ -666,27 +855,55 @@
 
       for (const sel of selectors) {
         const el = element.querySelector(sel);
-        if (el && el.innerText.trim()) {
-          return el.innerText.trim();
-        }
+        if (el && el.innerText.trim()) return el.innerText.trim();
       }
 
       const lines = element.innerText.split("\n").filter((l) => l.trim());
       return lines[0] || "";
     },
 
-    extractOptions(element) {
-      const optionElements = element.querySelectorAll(
-        ".option, .radio_item, label"
-      );
-      const options = [];
+    extractOptionElements(element) {
+      // 只抓真正的选项 label：必须包含 radio/checkbox input
+      const nodes = Array.from(element.querySelectorAll("label"))
+        .filter(lb => lb.querySelector('input[type="radio"], input[type="checkbox"]'))
+        .filter(lb => !lb.closest(".answer-mark")); // 排除脚本自己插入的答案条
 
-      optionElements.forEach((opt) => {
-        const text = opt.innerText.trim();
-        if (text) options.push(text);
-      });
+      // 去重
+      const uniq = [];
+      const seen = new Set();
+      for (const n of nodes) {
+        const key = (n.innerText || "").trim();
+        if (!key) continue;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        uniq.push(n);
+      }
+      return uniq;
+    },
 
-      return options.join("###");
+    buildOptionMap(element) {
+      const optionEls = this.extractOptionElements(element);
+      const optionMap = [];
+
+      for (let i = 0; i < optionEls.length; i++) {
+        const el = optionEls[i];
+        const rawText = (el.innerText || "").trim();
+        if (!rawText) continue;
+
+        const m = rawText.match(/^\s*([A-Z])[\.、\)]\s*/i);
+        let letter = m ? m[1].toUpperCase() : null;
+        if (!letter)
+          letter = String.fromCharCode("A".charCodeAt(0) + optionMap.length);
+
+        const text = rawText.replace(/^\s*[A-Z][\.、\)]\s*/i, "").trim();
+        optionMap.push({ letter, text: text || rawText, el });
+      }
+
+      return optionMap;
+    },
+
+    extractOptionsForBank(optionMap) {
+      return optionMap.map((o) => `${o.letter}. ${o.text}`).join("###");
     },
 
     detectQuestionType(element) {
@@ -695,73 +912,113 @@
       if (
         text.includes("单选") ||
         element.querySelectorAll('input[type="radio"]').length > 0
-      ) {
+      )
         return "0";
-      }
       if (
         text.includes("多选") ||
         element.querySelectorAll('input[type="checkbox"]').length > 0
-      ) {
+      )
         return "1";
-      }
-      if (text.includes("判断")) {
-        return "3";
-      }
+      if (text.includes("判断")) return "3";
       if (
         text.includes("填空") ||
         element.querySelectorAll('input[type="text"]').length > 0
-      ) {
+      )
         return "2";
-      }
       return "0";
+    },
+
+    getBlankInputs(element) {
+      return Array.from(
+        element.querySelectorAll('input[type="text"], textarea')
+      );
+    },
+
+    hasAnswered(element) {
+      if (element.querySelector(".answer-mark")) return true;
+      return false;
     },
 
     async processQuestion(element, num, total) {
       try {
-        if (element.querySelector(".answer-mark")) {
+        if (this.hasAnswered(element)) {
           Logger.debug(`第${num}题已处理,跳过`);
           return { status: "skipped", num };
         }
 
         const questionText = this.extractQuestionText(element);
-
         if (!questionText || questionText.length < 5) {
           Logger.warn(`第${num}题无法提取题目文本`);
           return { status: "failed", num, reason: "无法提取题目" };
         }
 
+        let qType = this.detectQuestionType(element);
+        const optionMap = this.buildOptionMap(element);
+
+        if (qType === "0") {
+          const radioCount = element.querySelectorAll('input[type="radio"]').length;
+          const judgeOnly = optionMap.filter(o => AnswerParser.normalizeJudgeToken(o.text));
+          if (radioCount === 2 && judgeOnly.length === 2) qType = "3";
+        }
+
+        const optionTexts = optionMap.map((o) => o.text);
+
+        const fingerprint = Utils.buildQuestionFingerprint({
+          questionText,
+          optionTexts,
+          qType,
+        });
+
         Logger.info(`第${num}题: ${questionText.substring(0, 40)}...`);
 
-        const cached = CacheManager.get(questionText);
+        const cached = CacheManager.get(fingerprint);
         if (cached) {
-          this.fillAnswer(element, cached, "缓存", num);
+          this.fillAnswerSmart(element, cached, "缓存", num, qType, optionMap);
           Logger.cache(`第${num}题 [缓存] ${cached}`);
           return { status: "success", num, source: "cache", answer: cached };
         }
 
-        const options = this.extractOptions(element);
-        const type = this.detectQuestionType(element);
+        const optionsForBank = this.extractOptionsForBank(optionMap);
 
         const enabledBanks = this.config.banks.filter((b) => b.enabled);
-
         if (enabledBanks.length > 0) {
           for (const bank of enabledBanks) {
             try {
-              const answer = await APIClient.queryBank(
+              const rawAnswer = await APIClient.queryBank(
                 bank,
                 questionText,
-                options,
-                type
+                optionsForBank,
+                qType
               );
-              CacheManager.set(questionText, answer);
-              this.fillAnswer(element, answer, bank.name, num);
-              Logger.success(`第${num}题 [${bank.name}] ${answer}`);
-              return {
-                status: "success",
-                num,
-                source: bank.name,
-                answer,
-              };
+              const normalized = this.normalizeAndValidateAnswer(
+                rawAnswer,
+                qType,
+                optionMap,
+                element
+              );
+
+              if (normalized) {
+                CacheManager.set(fingerprint, normalized);
+                this.fillAnswerSmart(
+                  element,
+                  normalized,
+                  bank.name,
+                  num,
+                  qType,
+                  optionMap
+                );
+                Logger.success(`第${num}题 [${bank.name}] ${normalized}`);
+                return {
+                  status: "success",
+                  num,
+                  source: bank.name,
+                  answer: normalized,
+                };
+              }
+
+              Logger.warn(
+                `第${num}题 [${bank.name}] 返回答案无法解析: ${rawAnswer}`
+              );
             } catch (error) {
               Logger.debug(
                 `第${num}题 [${bank.name}] 未找到: ${error.message}`
@@ -771,14 +1028,47 @@
         }
 
         if (this.config.ai_enabled && this.config.ai_key) {
-          const providerName =
-            AI_MODELS[this.config.ai_provider]?.name || "AI";
-          Logger.info(`第${num}题 使用${providerName}答题`);
-          const answer = await APIClient.queryAI(this.config, questionText);
-          CacheManager.set(questionText, answer);
-          this.fillAnswer(element, answer, providerName, num);
-          Logger.success(`第${num}题 [${providerName}] ${answer}`);
-          return { status: "success", num, source: providerName, answer };
+          const providerName = AI_MODELS[this.config.ai_provider]?.name || "AI";
+          Logger.info(`第${num}题 使用${providerName}答题(JSON模式)`);
+
+          const prompt = AnswerParser.buildAIPrompt({
+            questionText,
+            qType,
+            optionMap,
+          });
+          const raw = await APIClient.queryAIWithRepair(
+            this.config,
+            prompt,
+            `题型=${AnswerParser.typeName(qType)}`
+          );
+
+          const normalized = this.normalizeAndValidateAnswer(
+            raw,
+            qType,
+            optionMap,
+            element
+          );
+          if (!normalized) {
+            Logger.error(`第${num}题 AI返回: ${raw.substring(0, 150)}`);
+            throw new Error("AI答案解析失败");
+          }
+
+          CacheManager.set(fingerprint, normalized);
+          this.fillAnswerSmart(
+            element,
+            normalized,
+            providerName,
+            num,
+            qType,
+            optionMap
+          );
+          Logger.success(`第${num}题 [${providerName}] ${normalized}`);
+          return {
+            status: "success",
+            num,
+            source: providerName,
+            answer: normalized,
+          };
         }
 
         Logger.error(`第${num}题 所有方式均未找到答案`);
@@ -789,70 +1079,209 @@
       }
     },
 
-    fillAnswer(element, answer, source, num) {
+    // 【核心修复】增加判断题单独处理
+    normalizeAndValidateAnswer(rawAnswer, qType, optionMap, element) {
+      const { answers } = AnswerParser.normalizeRawToAnswers(rawAnswer);
+
+      if (qType === "2") {
+        const blankCount = this.getBlankInputs(element).length;
+        const blanks = AnswerParser.resolveBlankAnswers({
+          answers,
+          blankCount,
+        });
+        const out = { answers: blanks };
+        const display = AnswerParser.toDisplayString(qType, out);
+        return display || null;
+      }
+
+      // 【新增】判断题单独处理
+      if (qType === "3") {
+        Logger.debug(`判断题原始答案: ${JSON.stringify(answers)}`);
+
+        // ✅ 新增：过滤出真正的“对/错”选项，避免 optionMap 被多余 label 污染
+        const judgeOnly = optionMap.filter((o) =>
+          AnswerParser.normalizeJudgeToken(o.text)
+        );
+        const safeOptionMap = judgeOnly.length >= 2 ? judgeOnly : optionMap;
+
+        // 第1步：尝试直接识别语义
+        let judge = null;
+        for (const ans of answers) {
+          judge = AnswerParser.normalizeJudgeToken(ans);
+          if (judge) {
+            Logger.debug(`步骤1识别到: ${judge}`);
+            break;
+          }
+        }
+
+        // 第2步：如果是字母，从选项推断（这里用 safeOptionMap）
+        if (!judge && answers.length > 0) {
+          const firstAns = String(answers[0]).trim().toUpperCase();
+          if (/^[A-Z]$/.test(firstAns)) {
+            judge = AnswerParser.judgeFromLetterByOptions(
+              firstAns,
+              safeOptionMap
+            );
+            if (judge) Logger.debug(`步骤2从字母${firstAns}识别到: ${judge}`);
+          }
+        }
+
+        // 第3步：合并识别
+        if (!judge) {
+          const combined = answers.join(" ");
+          judge = AnswerParser.normalizeJudgeToken(combined);
+          if (judge) Logger.debug(`步骤3合并识别到: ${judge}`);
+        }
+
+        if (!judge) {
+          Logger.error(`判断题无法识别答案: ${JSON.stringify(answers)}`);
+          return null;
+        }
+
+        // 找到对应的选项字母（这里用 safeOptionMap）
+        const letters = AnswerParser.resolveChoiceLetters({
+          qType,
+          answers: [judge],
+          optionMap: safeOptionMap,
+        });
+
+        if (!letters || letters.length === 0) {
+          Logger.error(`判断题无法匹配选项: ${judge}`);
+          return null;
+        }
+
+        Logger.debug(`判断题最终选项: ${letters[0]}`);
+        // 返回字母（会在fillAnswerSmart中转换为"对/错"显示）
+        return letters[0];
+      }
+
+      // 单选/多选
+      const letters = AnswerParser.resolveChoiceLetters({
+        qType,
+        answers,
+        optionMap,
+      });
+      if (!letters || letters.length === 0) return null;
+
+      const sorted = letters
+        .map((x) => x.toUpperCase())
+        .filter(Boolean)
+        .sort((a, b) => a.charCodeAt(0) - b.charCodeAt(0));
+
+      const out = { answers: sorted };
+      const display = AnswerParser.toDisplayString(qType, out);
+      return display || null;
+    },
+
+    // UI层最终显示转换
+    fillAnswerSmart(element, answerDisplay, source, num, qType, optionMap) {
+      let finalDisplay = answerDisplay;
+
+      // ✅ 新增：判断题点击/显示也用过滤后的 optionMap
+      let safeOptionMap = optionMap;
+      if (qType === "3") {
+        const judgeOnly = optionMap.filter((o) =>
+          AnswerParser.normalizeJudgeToken(o.text)
+        );
+        if (judgeOnly.length >= 2) safeOptionMap = judgeOnly;
+      }
+
+      // 判断题：如果是字母，转换为"对/错"显示（这里用 safeOptionMap）
+      if (
+        qType === "3" &&
+        /^[A-Z]$/.test(String(answerDisplay).trim().toUpperCase())
+      ) {
+        const letter = String(answerDisplay).trim().toUpperCase();
+        const judge = AnswerParser.judgeFromLetterByOptions(
+          letter,
+          safeOptionMap
+        );
+        if (judge) {
+          finalDisplay = judge === "正确" ? "对" : "错";
+          Logger.debug(`UI层转换判断题: ${letter} -> ${finalDisplay}`);
+        }
+      }
+
       const mark = document.createElement("div");
       mark.className = "answer-mark";
-      mark.textContent = `✅ [${source}] 答案: ${answer}`;
+      mark.textContent = `✅ [${source}] 答案: ${finalDisplay}`;
 
       const titleBox = element.querySelector(
         ".question-title-box, .stem, .title"
       );
-      if (titleBox) {
-        titleBox.appendChild(mark);
+      if (titleBox) titleBox.appendChild(mark);
+      else element.insertBefore(mark, element.firstChild);
+
+      if (qType === "2") {
+        const blanks = (answerDisplay || "")
+          .split("#")
+          .map((x) => x.trim())
+          .filter(Boolean);
+        this.fillBlankAnswer(element, blanks);
       } else {
-        element.insertBefore(mark, element.firstChild);
+        const letters = (answerDisplay || "")
+          .split("#")
+          .map((x) => x.trim().toUpperCase())
+          .filter(Boolean);
+
+        // ✅ 这里也传 safeOptionMap，避免点到多余 label
+        this.fillChoiceByLetters(element, letters, safeOptionMap, qType);
       }
-
-      const answers = answer
-        .split("#")
-        .map((a) => a.trim())
-        .filter((a) => a);
-
-      this.fillChoiceAnswer(element, answers);
-      this.fillBlankAnswer(element, answers);
     },
 
-    fillChoiceAnswer(element, answers) {
-      const options = element.querySelectorAll("label, .option, .radio_item");
+    fillChoiceByLetters(element, letters, optionMap, qType) {
+      const target = new Set(letters);
+      if (target.size === 0) return;
 
-      options.forEach((option) => {
-        let optionText = (option.innerText || "").trim();
-        optionText = Utils.normalizeText(optionText);
+      const clickOne = async (opt) => {
+        const el = opt.el;
 
-        answers.forEach((ans) => {
-          const cleanAns = Utils.normalizeText(ans);
+        let input = el.querySelector("input");
+        if (!input) {
+          input = el.closest("label")?.querySelector("input") || null;
+        }
 
-          if (
-            optionText.includes(cleanAns) ||
-            cleanAns.includes(optionText) ||
-            optionText === cleanAns
-          ) {
-            setTimeout(() => {
-              option.click();
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            el.click();
+            el.dispatchEvent(
+              new MouseEvent("click", { bubbles: true, cancelable: true })
+            );
+          } catch (_) {}
 
-              const input = option.querySelector("input");
-              if (input) {
-                input.checked = true;
-                input.dispatchEvent(new Event("change", { bubbles: true }));
-              }
+          await Utils.sleep(80);
 
-              option.dispatchEvent(
-                new MouseEvent("click", {
-                  bubbles: true,
-                  cancelable: true,
-                })
-              );
-            }, 100);
+          if (input) {
+            if (qType === "1") {
+              if (input.checked) return true;
+            } else {
+              if (input.checked) return true;
+            }
+          } else {
+            return true;
           }
-        });
-      });
+        }
+        return false;
+      };
+
+      (async () => {
+        const list = qType === "0" || qType === "3" ? [letters[0]] : letters;
+
+        for (const L of list) {
+          const opt = optionMap.find((x) => x.letter.toUpperCase() === L);
+          if (!opt) continue;
+
+          const ok = await clickOne(opt);
+          if (!ok) Logger.warn(`选项 ${L} 点击后未确认选中，已尝试重试`);
+        }
+      })();
     },
 
     fillBlankAnswer(element, answers) {
-      const inputs = element.querySelectorAll('input[type="text"], textarea');
+      const inputs = this.getBlankInputs(element);
       inputs.forEach((input, i) => {
-        if (answers[i]) {
-          input.value = answers[i];
+        if (answers[i] != null && String(answers[i]).trim() !== "") {
+          input.value = String(answers[i]).trim();
           input.dispatchEvent(new Event("input", { bubbles: true }));
           input.dispatchEvent(new Event("change", { bubbles: true }));
         }
@@ -885,14 +1314,8 @@
     }
 
     @media (max-width: 768px) {
-      #FIX_PANEL {
-        width: 90% !important;
-        max-width: 350px;
-      }
-      #FIX_CFG {
-        width: 90% !important;
-        padding: 15px;
-      }
+      #FIX_PANEL { width: 90% !important; max-width: 350px; }
+      #FIX_CFG { width: 90% !important; padding: 15px; }
     }
 
     #panel_header {
@@ -927,20 +1350,10 @@
       line-height: 1;
       transition: all 0.3s;
     }
+    #minimize_btn:hover { background: #ffff00; transform: scale(1.1); }
 
-    #minimize_btn:hover {
-      background: #ffff00;
-      transform: scale(1.1);
-    }
-
-    #FIX_PANEL.minimized {
-      width: 200px !important;
-      height: 50px !important;
-    }
-
-    #FIX_PANEL.minimized #panel_content {
-      display: none;
-    }
+    #FIX_PANEL.minimized { width: 200px !important; height: 50px !important; }
+    #FIX_PANEL.minimized #panel_content { display: none; }
 
     #fix_log {
       max-height: 40vh;
@@ -951,16 +1364,11 @@
 
     #fix_log::-webkit-scrollbar,
     #FIX_PANEL::-webkit-scrollbar,
-    #FIX_CFG::-webkit-scrollbar {
-      width: 6px;
-    }
+    #FIX_CFG::-webkit-scrollbar { width: 6px; }
 
     #fix_log::-webkit-scrollbar-thumb,
     #FIX_PANEL::-webkit-scrollbar-thumb,
-    #FIX_CFG::-webkit-scrollbar-thumb {
-      background: #0f0;
-      border-radius: 3px;
-    }
+    #FIX_CFG::-webkit-scrollbar-thumb { background: #0f0; border-radius: 3px; }
 
     .log-e {
       margin: 8px 0;
@@ -987,22 +1395,13 @@
       transition: all 0.3s;
       text-shadow: 0 1px 2px rgba(0,0,0,0.3);
     }
-
     .cfg-btn:hover {
       background: linear-gradient(135deg, #00ff00, #0f0) !important;
       box-shadow: 0 0 25px rgba(0,255,0,0.6);
       transform: translateY(-2px);
     }
-
-    .cfg-btn:active {
-      transform: translateY(0);
-    }
-
-    .cfg-btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-      transform: none !important;
-    }
+    .cfg-btn:active { transform: translateY(0); }
+    .cfg-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
 
     #FIX_CFG {
       display: none;
@@ -1043,16 +1442,12 @@
       font-weight: bold;
       box-shadow: 0 2px 8px rgba(255,0,0,0.3);
     }
-
     #cfg_close_btn:hover {
       background: linear-gradient(135deg, #ff0000, #ff3333);
       transform: scale(1.1) rotate(90deg);
       box-shadow: 0 4px 12px rgba(255,0,0,0.5);
     }
-
-    #cfg_close_btn:active {
-      transform: scale(0.95) rotate(90deg);
-    }
+    #cfg_close_btn:active { transform: scale(0.95) rotate(90deg); }
 
     .cfg-section {
       background: rgba(0,255,0,0.05);
@@ -1094,29 +1489,10 @@
       box-shadow: 0 0 15px rgba(0,255,0,0.4);
     }
 
-    #FIX_CFG input[type="checkbox"] {
-      width: 18px;
-      height: 18px;
-      margin-right: 10px;
-      cursor: pointer;
-    }
-
-    #FIX_CFG label {
-      display: flex;
-      align-items: center;
-      margin: 10px 0;
-      cursor: pointer;
-      font-size: 15px;
-    }
-
-    #FIX_CFG select {
-      cursor: pointer;
-    }
-
-    #FIX_CFG select option {
-      background: #000;
-      color: #0f0;
-    }
+    #FIX_CFG input[type="checkbox"] { width: 18px; height: 18px; margin-right: 10px; cursor: pointer; }
+    #FIX_CFG label { display: flex; align-items: center; margin: 10px 0; cursor: pointer; font-size: 15px; }
+    #FIX_CFG select { cursor: pointer; }
+    #FIX_CFG select option { background: #000; color: #0f0; }
 
     .bank-item {
       background: rgba(0,0,0,0.4);
@@ -1127,14 +1503,8 @@
       transition: all 0.3s;
       position: relative;
     }
-
-    .bank-item.disabled {
-      opacity: 0.5;
-    }
-
-    .bank-item:hover {
-      border-color: rgba(0,255,0,0.5);
-    }
+    .bank-item.disabled { opacity: 0.5; }
+    .bank-item:hover { border-color: rgba(0,255,0,0.5); }
 
     .bank-item-close {
       position: absolute;
@@ -1155,7 +1525,6 @@
       font-weight: bold;
       box-shadow: 0 2px 5px rgba(255,0,0,0.3);
     }
-
     .bank-item-close:hover {
       background: linear-gradient(135deg, #ff0000, #ff3333);
       transform: scale(1.1) rotate(90deg);
@@ -1173,47 +1542,14 @@
       font-size: 15px !important;
     }
 
-    .btn-group {
-      display: flex;
-      gap: 10px;
-      margin-top: 20px;
-      flex-wrap: wrap;
-    }
+    .btn-group { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+    .btn-group button { flex: 1; min-width: 120px; }
 
-    .btn-group button {
-      flex: 1;
-      min-width: 120px;
-    }
+    #progress_bar { width: 100%; height: 6px; background: rgba(0,255,0,0.2); border-radius: 3px; margin: 10px 0; overflow: hidden; }
+    #progress_fill { height: 100%; background: linear-gradient(90deg, #0f0, #00ff00); width: 0%; transition: width 0.3s; }
 
-    #progress_bar {
-      width: 100%;
-      height: 6px;
-      background: rgba(0,255,0,0.2);
-      border-radius: 3px;
-      margin: 10px 0;
-      overflow: hidden;
-    }
-
-    #progress_fill {
-      height: 100%;
-      background: linear-gradient(90deg, #0f0, #00ff00);
-      width: 0%;
-      transition: width 0.3s;
-    }
-
-    .stats-box {
-      background: rgba(0,255,0,0.1);
-      padding: 10px;
-      border-radius: 8px;
-      margin: 10px 0;
-      font-size: 13px;
-    }
-
-    .stats-item {
-      display: flex;
-      justify-content: space-between;
-      padding: 5px 0;
-    }
+    .stats-box { background: rgba(0,255,0,0.1); padding: 10px; border-radius: 8px; margin: 10px 0; font-size: 13px; }
+    .stats-item { display: flex; justify-content: space-between; padding: 5px 0; }
 
     .ai-provider-hint {
       background: rgba(0,0,0,0.75);
@@ -1225,24 +1561,19 @@
       line-height: 1.7;
       color: #c8ffc8;
     }
-
-    .ai-provider-hint strong {
-      color: #ffff66;
-      font-weight: bold;
-    }
-
+    .ai-provider-hint strong { color: #ffff66; font-weight: bold; }
     .ai-provider-hint code {
       display: inline-block;
-      padding: 3px 8px;
-      margin: 3px 4px 0 0;
-      border-radius: 6px;
-      background: rgba(0,0,0,0.95);
-      border: 1px solid #ffff66;
+      padding: 0 2px;
+      margin: 0 2px;
+      border-radius: 0;
+      background: transparent !important;
+      border: none;
       color: #ffff66;
       font-size: 13px;
       font-weight: bold;
       font-family: "Consolas","Monaco",monospace;
-      text-shadow: 0 0 5px rgba(255,255,102,0.7);
+      text-shadow: none;
     }
   `);
 
@@ -1264,7 +1595,7 @@
       panel.id = "FIX_PANEL";
       panel.innerHTML = `
         <div id="panel_header">
-          <span style="font-size:18px;">📊 传智满分助手 v13.6</span>
+          <span style="font-size:18px;">📊 传智满分助手 v13.12</span>
           <button id="minimize_btn" title="最小化/还原">−</button>
         </div>
         <div id="panel_content">
@@ -1286,9 +1617,7 @@
               <span id="ai_status">未启用</span>
             </div>
           </div>
-          <div id="progress_bar">
-            <div id="progress_fill"></div>
-          </div>
+          <div id="progress_bar"><div id="progress_fill"></div></div>
           <div id="fix_log"></div>
           <div style="text-align:center;color:#ff0;font-size:15px;margin-top:12px;text-shadow: 0 0 8px #ff0;" id="fix_status">
             等待开始...
@@ -1296,7 +1625,6 @@
         </div>
       `;
       document.body.appendChild(panel);
-
       this.updateStats();
     },
 
@@ -1304,7 +1632,6 @@
       const cfg = document.createElement("div");
       cfg.id = "FIX_CFG";
 
-      // 构建AI提供商选项
       const aiProviderOptions = Object.entries(AI_MODELS)
         .map(
           ([key, model]) =>
@@ -1314,7 +1641,6 @@
         )
         .join("");
 
-      // HTML 结构
       cfg.innerHTML = `
         <button id="cfg_close_btn" title="关闭">✕</button>
 
@@ -1331,7 +1657,7 @@
         </div>
 
         <div class="cfg-section">
-          <h3>🤖 AI配置 (全模型支持)</h3>
+          <h3>🤖 AI配置 (全模型/中转通用)</h3>
           <label>
             <input type="checkbox" id="ai_sw" ${
               this.config.ai_enabled ? "checked" : ""
@@ -1408,7 +1734,6 @@
         </div>
       `;
       document.body.appendChild(cfg);
-
       this.renderBanksList();
     },
 
@@ -1491,7 +1816,6 @@
     },
 
     bindEvents() {
-      // 最小化按钮
       document.getElementById("minimize_btn").onclick = () => {
         const panel = document.getElementById("FIX_PANEL");
         panel.classList.toggle("minimized");
@@ -1499,27 +1823,19 @@
           panel.classList.contains("minimized") ? "+" : "−";
       };
 
-      // 打开配置
       document.getElementById("open_cfg").onclick = () => {
         document.getElementById("FIX_CFG").style.display = "block";
       };
 
-      // 配置弹窗右上角关闭按钮
       document.getElementById("cfg_close_btn").onclick = () => {
         document.getElementById("FIX_CFG").style.display = "none";
       };
 
-      // 保存配置
-      document.getElementById("save_cfg").onclick = () => {
-        this.saveConfig();
-      };
+      document.getElementById("save_cfg").onclick = () => this.saveConfig();
 
-      // 开始答题
-      document.getElementById("start_answer").onclick = () => {
+      document.getElementById("start_answer").onclick = () =>
         this.startAnswering();
-      };
 
-      // 添加题库
       document.getElementById("add_bank").onclick = () => {
         this.config.banks.push({
           name: "新题库",
@@ -1532,7 +1848,6 @@
         Logger.info("已添加新题库");
       };
 
-      // AI提供商切换
       document.getElementById("ai_provider").onchange = (e) => {
         const provider = e.target.value;
         const providerConfig = AI_MODELS[provider];
@@ -1540,23 +1855,19 @@
         const modelInput = document.getElementById("ai_model");
 
         this.config.ai_provider = provider;
-
         modelInput.value = providerConfig.defaultModel;
         modelInput.placeholder = `例如: ${providerConfig.defaultModel}`;
-
         urlInput.value = providerConfig.endpoint;
 
         Logger.info(`已切换厂商: ${providerConfig.name}, 请确认模型名称`);
       };
 
-      // 显示/隐藏AI Key
       document.getElementById("toggle_ai_key").onclick = (e) => {
         const input = document.getElementById("ai_k");
         input.type = input.type === "password" ? "text" : "password";
         e.target.textContent = input.type === "password" ? "显示" : "隐藏";
       };
 
-      // 清空缓存
       document.getElementById("clear_cache").onclick = () => {
         if (confirm("确定清空所有缓存?")) {
           CacheManager.clear();
@@ -1565,30 +1876,23 @@
         }
       };
 
-      // 清空日志
       document.getElementById("clear_log").onclick = () => {
         Logger.clear();
         Logger.success("日志已清空");
       };
 
-      // 导出配置
       document.getElementById("export_config").onclick = () => {
         ConfigManager.export();
         Logger.success("配置已导出");
       };
 
-      // 导出日志
       document.getElementById("export_log").onclick = () => {
         Logger.export();
         Logger.success("日志已导出");
       };
 
-      // 测试 AI 按钮
-      document.getElementById("test_ai").onclick = () => {
-        this.testAIConfig();
-      };
+      document.getElementById("test_ai").onclick = () => this.testAIConfig();
 
-      // ESC键关闭配置
       document.addEventListener("keydown", (e) => {
         if (
           e.key === "Escape" &&
@@ -1607,18 +1911,10 @@
         let ai_url = document.getElementById("ai_u").value.trim();
         const ai_model = document.getElementById("ai_model").value.trim();
 
-        if (!ai_enabled) {
-          alert("请先勾选【启用AI答题】再测试。");
-          return;
-        }
-        if (!ai_key || !ai_model) {
-          alert("请先填写 API Key 和 模型名称。");
-          return;
-        }
-
-        if (!ai_url) {
-          ai_url = AI_MODELS[ai_provider].endpoint;
-        }
+        if (!ai_enabled) return alert("请先勾选【启用AI答题】再测试。");
+        if (!ai_key || !ai_model)
+          return alert("请先填写 API Key 和 模型名称。");
+        if (!ai_url) ai_url = AI_MODELS[ai_provider].endpoint;
 
         const tempConfig = {
           ai_enabled: true,
@@ -1629,10 +1925,15 @@
         };
 
         Logger.info("正在测试 AI 配置，请稍等...");
-        const res = await APIClient.queryAI(tempConfig, "只需回复: OK");
-        const preview = (res || "").toString().slice(0, 50);
+        const prompt = '只输出 JSON：{"answers":["OK"]}';
+        const res = await APIClient.queryAIWithRepair(
+          tempConfig,
+          prompt,
+          "测试"
+        );
+        const preview = (res || "").toString().slice(0, 80);
         Logger.success("AI 测试成功, 返回: " + preview);
-        alert("AI 测试成功！\n返回内容(前50字):\n" + preview);
+        alert("AI 测试成功！\n返回内容(前80字):\n" + preview);
       } catch (err) {
         Logger.error("AI 测试失败: " + err.message);
         alert("AI 测试失败:\n" + err.message);
@@ -1640,7 +1941,6 @@
     },
 
     saveConfig() {
-      // 读取配置
       this.config.ai_enabled = document.getElementById("ai_sw").checked;
       this.config.ai_provider = document.getElementById("ai_provider").value;
       this.config.ai_key = document.getElementById("ai_k").value.trim();
@@ -1648,32 +1948,24 @@
       this.config.ai_model = document.getElementById("ai_model").value.trim();
       this.config.logLevel = document.getElementById("log_level").value;
 
-      // 设置默认URL(如果为空)
       if (!this.config.ai_url) {
         const provider = AI_MODELS[this.config.ai_provider];
         this.config.ai_url = provider.endpoint;
       }
 
-      // 验证配置
       const errors = ConfigManager.validate(this.config);
-      if (errors.length > 0) {
-        alert("配置错误:\n\n" + errors.join("\n"));
-        return;
-      }
+      if (errors.length > 0) return alert("配置错误:\n\n" + errors.join("\n"));
 
-      // 保存配置
       ConfigManager.save(this.config);
       document.getElementById("FIX_CFG").style.display = "none";
 
       Logger.success("配置已保存");
       Logger.init(this.config.logLevel);
       QuestionProcessor.init(this.config);
-
       this.updateStats();
 
       if (this.config.ai_enabled) {
-        const providerName =
-          AI_MODELS[this.config.ai_provider]?.name || "AI";
+        const providerName = AI_MODELS[this.config.ai_provider]?.name || "AI";
         Logger.info(
           `AI已启用: ${providerName} (模型: ${this.config.ai_model})`
         );
@@ -1688,8 +1980,7 @@
 
       const aiStatus = document.getElementById("ai_status");
       if (this.config.ai_enabled) {
-        const providerName =
-          AI_MODELS[this.config.ai_provider]?.name || "未知";
+        const providerName = AI_MODELS[this.config.ai_provider]?.name || "未知";
         aiStatus.textContent = `${providerName}`;
         aiStatus.style.color = "#0f0";
       } else {
@@ -1706,9 +1997,7 @@
     updateProgress(current, total) {
       const percent = (current / total) * 100;
       document.getElementById("progress_fill").style.width = percent + "%";
-      this.updateStatus(
-        `处理中: ${current}/${total} (${percent.toFixed(1)}%)`
-      );
+      this.updateStatus(`处理中: ${current}/${total} (${percent.toFixed(1)}%)`);
     },
 
     async startAnswering() {
@@ -1730,13 +2019,7 @@
       startBtn.textContent = "⏸️ 处理中...";
 
       Logger.success(`开始处理 ${questions.length} 道题目`);
-
-      const results = {
-        success: 0,
-        failed: 0,
-        skipped: 0,
-        error: 0,
-      };
+      const results = { success: 0, failed: 0, skipped: 0, error: 0 };
 
       for (let i = 0; i < questions.length; i++) {
         try {
@@ -1752,8 +2035,7 @@
           else if (result.status === "error") results.error++;
 
           this.updateProgress(i + 1, questions.length);
-
-          await Utils.sleep(800);
+          await Utils.sleep(650);
         } catch (error) {
           Logger.error(`第${i + 1}题处理异常: ${error.message}`);
           results.error++;
@@ -1783,7 +2065,6 @@
     makeDraggable() {
       const panel = document.getElementById("FIX_PANEL");
       const header = document.getElementById("panel_header");
-
       let isDragging = false;
       let currentX, currentY, initialX, initialY;
 
@@ -1800,21 +2081,21 @@
       });
 
       document.addEventListener("mousemove", (e) => {
-        if (isDragging) {
-          e.preventDefault();
-          currentX = e.clientX - initialX;
-          currentY = e.clientY - initialY;
+        if (!isDragging) return;
+        e.preventDefault();
 
-          const maxX = window.innerWidth - panel.offsetWidth;
-          const maxY = window.innerHeight - panel.offsetHeight;
+        currentX = e.clientX - initialX;
+        currentY = e.clientY - initialY;
 
-          currentX = Math.max(0, Math.min(currentX, maxX));
-          currentY = Math.max(0, Math.min(currentY, maxY));
+        const maxX = window.innerWidth - panel.offsetWidth;
+        const maxY = window.innerHeight - panel.offsetHeight;
 
-          panel.style.left = currentX + "px";
-          panel.style.top = currentY + "px";
-          panel.style.right = "auto";
-        }
+        currentX = Math.max(0, Math.min(currentX, maxX));
+        currentY = Math.max(0, Math.min(currentY, maxY));
+
+        panel.style.left = currentX + "px";
+        panel.style.top = currentY + "px";
+        panel.style.right = "auto";
       });
 
       document.addEventListener("mouseup", () => {
@@ -1826,49 +2107,46 @@
     },
   };
 
-// ================ 防检测 ================
-function applyAntiDetection() {
-  // 只在写卷页面启用
-  if (!window.location.href.includes("/writePaper/")) return;
+  // ================ 防检测 ================
+  function applyAntiDetection() {
+    if (!window.location.href.includes("/writePaper/")) return;
 
-  try {
-    // 拦截可见性 / 焦点事件，防止被监控切屏
-    ["visibilitychange", "webkitvisibilitychange", "mozvisibilitychange", "msvisibilitychange", "blur", "focus"].forEach((e) => {
-      window.addEventListener(
-        e,
-        (ev) => ev.stopImmediatePropagation(),
-        true
-      );
-    });
-
-    // 兼容地处理 document.hidden：如果是可配置的才去重写
-    const desc =
-      Object.getOwnPropertyDescriptor(document, "hidden") ||
-      Object.getOwnPropertyDescriptor(Document.prototype || {}, "hidden");
-
-    if (!desc || desc.configurable) {
-      Object.defineProperty(document, "hidden", {
-        get: () => false,
-        configurable: true,
+    try {
+      [
+        "visibilitychange",
+        "webkitvisibilitychange",
+        "mozvisibilitychange",
+        "msvisibilitychange",
+        "blur",
+        "focus",
+      ].forEach((e) => {
+        window.addEventListener(e, (ev) => ev.stopImmediatePropagation(), true);
       });
-      Logger.debug("已重写 document.hidden 属性");
-    } else {
-      // 某些浏览器中该属性不可配置，强行重写会报错，这里直接跳过即可
-      Logger.debug("document.hidden 为不可配置属性，跳过重写");
-    }
 
-    // hasFocus 直接覆盖即可，通常不会抛错
-    if (typeof document.hasFocus === "function") {
-      document.hasFocus = () => true;
-      Logger.debug("已重写 document.hasFocus");
-    }
+      const desc =
+        Object.getOwnPropertyDescriptor(document, "hidden") ||
+        Object.getOwnPropertyDescriptor(Document.prototype || {}, "hidden");
 
-    Logger.debug("防检测已启用(兼容模式)");
-  } catch (e) {
-    // 所有异常都吃掉，只打日志，不让 init 整体失败
-    Logger.warn("防检测启用失败, 已降级处理: " + e.message);
+      if (!desc || desc.configurable) {
+        Object.defineProperty(document, "hidden", {
+          get: () => false,
+          configurable: true,
+        });
+        Logger.debug("已重写 document.hidden 属性");
+      } else {
+        Logger.debug("document.hidden 为不可配置属性，跳过重写");
+      }
+
+      if (typeof document.hasFocus === "function") {
+        document.hasFocus = () => true;
+        Logger.debug("已重写 document.hasFocus");
+      }
+
+      Logger.debug("防检测已启用(兼容模式)");
+    } catch (e) {
+      Logger.warn("防检测启用失败, 已降级处理: " + e.message);
+    }
   }
-}
 
   // ================ 主初始化 ================
   async function init() {
@@ -1882,28 +2160,23 @@ function applyAntiDetection() {
 
       applyAntiDetection();
 
-      Logger.success("脚本加载完成 v13.6");
+      Logger.success("脚本加载完成 v13.12（判断题彻底修复）");
 
       const enabledBanks = config.banks.filter((b) => b.enabled && b.token);
-      if (enabledBanks.length > 0) {
+      if (enabledBanks.length > 0)
         Logger.info(`已配置 ${enabledBanks.length} 个题库`);
-      } else {
-        Logger.warn("未配置题库");
-      }
+      else Logger.warn("未配置题库");
 
       if (config.ai_enabled && config.ai_key) {
-        const providerName =
-          AI_MODELS[config.ai_provider]?.name || "AI";
+        const providerName = AI_MODELS[config.ai_provider]?.name || "AI";
         Logger.info(`AI已启用: ${providerName} (${config.ai_model})`);
       }
 
-      await Utils.sleep(2000);
+      await Utils.sleep(1200);
       const questions = QuestionProcessor.detectQuestions();
       if (questions.length > 0) {
         Logger.success(`检测到 ${questions.length} 道题目`);
-        UIManager.updateStatus(
-          `检测到 ${questions.length} 道题,点击开始答题`
-        );
+        UIManager.updateStatus(`检测到 ${questions.length} 道题,点击开始答题`);
       } else {
         Logger.info("等待题目加载...");
       }
@@ -1914,13 +2187,10 @@ function applyAntiDetection() {
   }
 
   // ================ 启动 ================
-  if (document.readyState === "loading") {
+  if (document.readyState === "loading")
     document.addEventListener("DOMContentLoaded", init);
-  } else {
-    setTimeout(init, 100);
-  }
+  else setTimeout(init, 100);
 
-  // 全局错误处理
   window.addEventListener("error", (e) => {
     Logger.error(`全局错误: ${e.message}`);
     console.error(e);
