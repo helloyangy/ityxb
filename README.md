@@ -1,81 +1,73 @@
-# ityxb
-传智教育满分脚本-多AI增强版 2025.11.22
+# 传智教育答题脚本（ityxb）
 
-支持言溪题库，把token复制进去即可答题
+适用于 [**https://stu.ityxb.com/**](https://stu.ityxb.com/) 的油猴（Tampermonkey/Violentmonkey）答题辅助脚本，主打“多源答案 + 一致性置信度 + 可视化诊断”，用于提高做题效率与排查失败原因。
 
-题库地址：[https://tk.enncy.cn/](https://tk.enncy.cn/)
+- 当前主版本：**v14.1（20251228）**
+- 仓库用途：发布脚本、维护更新、提供安装/更新链接
 
-# 需要搭配油猴使用，脚本已经同步上传[greasyfork.org](https://greasyfork.org/zh-CN/scripts/555204-%E4%BC%A0%E6%99%BA%E6%95%99%E8%82%B2%E6%BB%A1%E5%88%86%E8%84%9A%E6%9C%AC-%E5%A4%9Aai%E5%A2%9E%E5%BC%BA%E7%89%88-2025-11-22)
+---
 
-AI答题正确配置方法
-打开配置面板，填入：
-```
-API Key: sk-OgpTIaWVlpVB66ib290c867cA4784871B6C6274462C451B0
+## 功能亮点
 
-API地址: https://burn.hair/v1/chat/completions
-(注意：必须包含完整路径 /v1/chat/completions)
+- 多来源：题库查询 + AI 模型辅助（可配置启用/禁用）。
+- 一致性/置信度：多来源答案聚合；冲突会提示“冲突”，并避免写入缓存，降低误答污染。
+- 题目指纹增强：对题干与选项进行归一化并生成指纹，减少“选项顺序变化”导致缓存 miss。
+- 自动填入 / 仅提示：可切换自动勾选/填空，或只显示建议答案。
+- 日志与诊断：内置失败原因计数与事件记录，支持导出诊断 JSON 便于定位问题。
 
-模型名称: gpt-4o-mini
-(或者 gpt-3.5-turbo，看你的中转支持哪个)
-```
+---
 
-推荐使用 [https://api.chatanywhere.com.cn]( https://api.chatanywhere.com.cn)的API中转
+## 安装（推荐 GitHub Raw）
 
-**主要新增功能**
+建议用 GitHub Raw 链接安装，便于更新后自动升级（文件名必须以 `.user.js` 结尾）。
 
-1.模型支持
+- 主脚本（v14.1）：`传智教育答题脚本-14.1-20251228.user.js`
 
-OpenAI (GPT): GPT-4o, GPT-4o-mini, GPT-4-turbo等
+安装方式：
+1. 浏览器安装 Tampermonkey / Violentmonkey 扩展。
+2. 打开仓库中该脚本文件页面，点击 **Raw**，在弹出的安装页点击安装即可。
 
-Claude (Anthropic): Claude 3.5 Sonnet, Claude 3 Opus等
+---
 
-Google Gemini: Gemini 2.0 Flash, Gemini 1.5 Pro等
+## 题库配置（言溪题库）
 
-DeepSeek: 国产模型，性价比高
+本脚本支持对接「言溪题库」进行答案查询（需要你自行在题库网站获取 Token 并填入配置面板）。
+- 题库地址：https://tk.enncy.cn/
+- 配置位置：脚本面板 → 配置 → 题库 → 启用并粘贴 Token
 
-自定义API: 兼容OpenAI格式的任意API
+---
 
-2.库配置UI优化​
+## AI 配置（可选）
 
-右上角关闭图标: 配置弹窗和题库项都添加了右上角✕关闭按钮
+支持多种 AI 提供商（OpenAI / Claude / Gemini / DeepSeek / 自定义 OpenAI 兼容接口），在配置面板中选择提供商并填写：
+- API Key：你的 Key（不要写进仓库/README）
+- API 地址：你的中转或官方地址（需包含完整路径，例如 `/v1/chat/completions`）
+- 模型名称：例如 `gpt-4o-mini`（以你的接口实际支持为准）
 
-悬停动画效果: 关闭按钮hover时有旋转和放大效果
+安全提示：**不要**在 README、Issues、Commit 中提交任何 API Key（泄露后可能被滥用并产生费用）。
 
-更好的视觉反馈: 圆形按钮设计，红色渐变背景
+---
 
-3.统一的AI接口适配
+## 截图预览
 
-自动适配不同AI模型的API格式
-
-统一的错误处理和响应解析
-
-支持不同的认证方式 (Bearer Token, API Key等)
-
-4.强的配置界面
-
-AI提供商下拉选择
-
-模型自动切换
-
-实时统计显示AI状态
-
-详细的配置提示
-
-* * *
-
-![2025-11-09_004044_870.png](./_resources/2025-11-09_004044_870.png)
+> 请将图片放到仓库目录 `_resources/` 下，然后在 README 使用相对路径引用。
 
 **脚本预览**
 
-![2025-11-09_002523_565.png](./_resources/2025-11-09_002523_565.png)
+![1.png](../_resources/1.png)
+![2.png](../_resources/2.png)
+![3.png](../_resources/3.png)
+![4.png](../_resources/4.png)
 
+---
 
+## 免责声明
 
-![2025-11-09_002436_843.png](./_resources/2025-11-09_002436_843.png)
+本项目仅用于学习研究与个人效率辅助，请遵守平台规则与法律法规。因使用本脚本造成的任何后果由使用者自行承担。
 
+---
 
+## 反馈与贡献
 
-![2025-11-09_002417_296.png](./_resources/2025-11-09_002417_296.png)
-
-
-
+欢迎提交 Issue/PR：
+- 提供：题目页截图、导出的日志、导出的诊断 JSON（更容易定位 DOM 变化/接口变化）。
